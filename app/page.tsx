@@ -10,10 +10,42 @@ import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
 import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
+import { isNotProvisionedError, loginWithEmailPasswordStrict } from "@/lib/auth";
+
 
 export default function Home() {
   const [showPassword, setShowPassword] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  const [loading, setLoading] = useState(false);
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [error, setError] = useState("");
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const { user } = await loginWithEmailPasswordStrict(email, password);
+      console.log("Logged in provisioned user:", user);
+
+      // next: redirect based on role (later)
+    } catch (err: any) {
+      if (isNotProvisionedError(err)) {
+        setError("Your account is not provisioned. Please contact the administrator.");
+      } else {
+        setError(err?.message || "Login failed");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+
   return (
     <div
       style={{
@@ -47,7 +79,7 @@ export default function Home() {
           <CardDescription>Sign in to continue to Rekrooot.</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={onSubmit}>
             <div className="space-y-2 text-left">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -56,6 +88,8 @@ export default function Home() {
                 placeholder="you@example.com"
                 autoComplete="email"
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2 text-left">
@@ -76,6 +110,8 @@ export default function Home() {
                   autoComplete="current-password"
                   required
                   className="pr-10"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
                 <button
                   type="button"
@@ -87,8 +123,8 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <Button type="submit" className="w-full mt-2">
-              Log in
+            <Button type="submit" className="w-full mt-2" disabled={loading}>
+              {loading ? "Logging in..." : "Log in"}
             </Button>
           </form>
         </CardContent>
