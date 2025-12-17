@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import Snowfall from "../components/Snowfall";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
@@ -14,6 +15,7 @@ import { isNotProvisionedError, loginWithEmailPasswordStrict } from "@/lib/auth"
 
 
 export default function Home() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const { theme, setTheme } = useTheme();
 
@@ -24,6 +26,14 @@ export default function Home() {
 
   const [error, setError] = useState("");
 
+
+  useEffect(() => {
+    const token = localStorage.getItem("auth_token");
+    if (token) {
+      router.push("/admin");
+    }
+  }, []);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -33,7 +43,7 @@ export default function Home() {
       const { user } = await loginWithEmailPasswordStrict(email, password);
       console.log("Logged in provisioned user:", user);
 
-      // next: redirect based on role (later)
+      router.push("/admin");
     } catch (err: any) {
       if (isNotProvisionedError(err)) {
         setError("Your account is not provisioned. Please contact the administrator.");
@@ -123,6 +133,9 @@ export default function Home() {
                 </button>
               </div>
             </div>
+            {error ? (
+              <div className="text-sm text-destructive">{error}</div>
+            ) : null}
             <Button type="submit" className="w-full mt-2" disabled={loading}>
               {loading ? "Logging in..." : "Log in"}
             </Button>
