@@ -64,6 +64,7 @@ export default function Home() {
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
         backgroundSize: "cover",
+        backgroundColor: "",
       }}
       className="w-full h-screen relative flex items-center justify-center px-4"
     >
