@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import Snowfall from "react-snowfall";
 import Header from "@/components/header";
 import Sidebar from "@/components/sidebar";
@@ -10,32 +10,25 @@ import Sidebar from "@/components/sidebar";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
-
-  useEffect(() => {
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return false;
     const savedTheme = window.localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
-      setDarkMode(true);
-      return;
-    }
-    if (savedTheme === 'light') {
-      setDarkMode(false);
-      return;
-    }
+    if (savedTheme === 'dark') return true;
+    if (savedTheme === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
 
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(systemPrefersDark);
-  }, []);
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     if (darkMode) {
       root.classList.add('dark');
-      window.localStorage.setItem('theme', 'dark');
     } else {
       root.classList.remove('dark');
-      window.localStorage.setItem('theme', 'light');
     }
+  }, [darkMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
 
   const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);

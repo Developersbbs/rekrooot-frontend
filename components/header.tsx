@@ -46,29 +46,7 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
 
   const role = 'Super Admin';
 
-  // Add this useEffect at the beginning of other useEffects
-  useEffect(() => {
-    // Check if user prefers dark mode
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    // Get theme from localStorage or use system preference
-    const savedTheme = localStorage.getItem('theme');
-    const initialDarkMode = savedTheme ? savedTheme === 'dark' : systemPrefersDark;
-    
-    // Call the toggleDarkMode with the initial value
-    toggleDarkMode(initialDarkMode);
-
-    // Optional: Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem('theme')) {
-        toggleDarkMode(e.matches);
-      }
-    };
-
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [toggleDarkMode]);
+  // Theme is controlled by AdminLayout; Header only reflects the current state via props.
 
   // Add useEffect to listen to auth state changes
   useEffect(() => {
