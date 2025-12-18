@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { motion } from 'framer-motion';
 
+
 type StatState = {
   totalJobs: number;
   totalClients: number;
@@ -297,7 +298,11 @@ function DashboardPage() {
                   fill="#8884d8"
                   paddingAngle={5}
                   dataKey="value"
-                  label={(props: { name: string; percent: number }) => `${props.name} ${(props.percent * 100).toFixed(0)}%`}
+                  label={(props: { name?: string; percent?: number }) => {
+                    const name = props.name ?? ''
+                    const percent = props.percent ?? 0
+                    return `${name} ${(percent * 100).toFixed(0)}%`
+                  }}
                   labelLine={{ stroke: 'currentColor', strokeWidth: 0.5 }}
                 >
                   {candidateStatusData.map((entry, index) => (
@@ -451,6 +456,7 @@ function DashboardPage() {
           transform: translateX(0) !important;
         }
       `}</style>
+
     </div>
   );
 }

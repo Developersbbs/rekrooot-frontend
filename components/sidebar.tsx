@@ -1,9 +1,9 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import { 
-  FiHome, 
-  FiUsers, 
+import {
+  FiHome,
+  FiUsers,
   FiChevronLeft,
   FiChevronRight,
   FiPlus,
@@ -12,6 +12,11 @@ import {
   FiX,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
+import CreateCompany from './createCompany';
+import { AnimatePresence } from 'framer-motion';
+
+
+
 
 type SidebarProps = {
   isCollapsed: boolean;
@@ -20,11 +25,11 @@ type SidebarProps = {
 
 type MenuItem =
   | {
-      type: 'item';
-      icon: IconType;
-      label: string;
-      onClick?: () => void;
-    }
+    type: 'item';
+    icon: IconType;
+    label: string;
+    onClick?: () => void;
+  }
   | { type: 'divider' };
 
 const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
@@ -136,25 +141,9 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
       </aside>
 
       {showAddCompanyModal ? (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAddCompanyModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-              <div className="text-base font-semibold text-gray-900 dark:text-white">Create Company (Sample)</div>
-              <button type="button" onClick={() => setShowAddCompanyModal(false)} className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
-                <FiX className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 text-sm text-gray-600 dark:text-gray-300">
-              This is a UI preview modal. Hook it to your DB/API later.
-            </div>
-          </div>
-        </div>
+        <AnimatePresence>
+          <CreateCompany onClose={() => setShowAddCompanyModal(false)} />
+        </AnimatePresence>
       ) : null}
 
       {showAddClientModal ? (
