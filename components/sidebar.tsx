@@ -15,6 +15,8 @@ import {
 import type { IconType } from 'react-icons';
 import CreateCompany from './createCompany';
 import { AnimatePresence } from 'framer-motion';
+import NewUser from './newUser';
+
 
 
 type SidebarProps = {
@@ -34,6 +36,7 @@ type MenuItem =
 const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
   const [active, setActive] = useState<string>('Dashboard');
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
 
   // Sample role and menu for UI preview
@@ -42,12 +45,9 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
   const menuItems = useMemo<MenuItem[]>(() => {
     const base: MenuItem[] = [
       { type: 'item', icon: FiHome, label: 'Dashboard' },
-      ...(userRole === 'SuperAdmin'
-        ? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const]
-        : []),
-      ...(userRole !== 'SuperAdmin'
-        ? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const]
-        : []),
+      ...(userRole === 'SuperAdmin'? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const]: []),
+      ...(userRole === 'SuperAdmin'? [{ type: 'item', icon: FiUser, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const]: []),
+      ...(userRole !== 'SuperAdmin'? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const]: []),
       {type: "item", icon: FiUser, label: "Interviewers"}, 
       { type: 'divider' },
       { type: 'item', icon: FiUsers, label: 'Recruiters' },
@@ -143,6 +143,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
       {showAddCompanyModal ? (
         <AnimatePresence>
           <CreateCompany onClose={() => setShowAddCompanyModal(false)} />
+        </AnimatePresence>
+      ) : null}
+
+      {showAddUserModal ? (
+        <AnimatePresence>
+          <NewUser onClose={ () => setShowAddUserModal(false)} />
         </AnimatePresence>
       ) : null}
 
