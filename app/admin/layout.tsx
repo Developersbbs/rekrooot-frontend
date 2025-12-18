@@ -50,7 +50,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         backgroundRepeat: 'repeat',
         backgroundPosition: 'center',
         backgroundSize: 'cover',
-        backgroundColor: '#0f172a',
       }}
     >
       <div className="w-full h-screen bg-background/90">
