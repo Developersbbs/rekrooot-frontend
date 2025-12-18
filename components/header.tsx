@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { logout } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 
 type HeaderProps = {
   toggleSidebar: () => void;
@@ -14,6 +15,11 @@ type HeaderProps = {
 
 type Company = {
   id: string;
+  name: string;
+};
+
+type CompanyDto = {
+  _id: string;
   name: string;
 };
 
@@ -31,7 +37,7 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
   const router = useRouter();
   const [user, setUser] = useState<HeaderUser | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
-  const [companies] = useState<Company[]>([{ id: 'all', name: 'All' }]);
+  const [companies, setCompanies] = useState<Company[]>([{ id: 'all', name: 'All' }]);
   const [selectedCompany, setSelectedCompany] = useState<Company>({ id: 'all', name: 'All' });
   const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -121,6 +127,59 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCompanies() {
+      if (role !== 'Super Admin') return;
+      if (!auth.currentUser) return;
+
+      const token = await auth.currentUser.getIdToken();
+
+      try {
+        const res = await apiFetch<{ companies: CompanyDto[] }>('/companies', { token });
+        if (cancelled) return;
+
+        const list: Company[] = [
+          { id: 'all', name: 'All' },
+          ...(res.companies || []).map((c) => ({ id: c._id, name: c.name })),
+        ];
+
+        setCompanies(list);
+      } catch {
+        if (cancelled) return;
+        setCompanies([{ id: 'all', name: 'All' }]);
+      }
+    }
+
+    // Initial load (may run before auth is ready)
+    void loadCompanies();
+
+    // Re-try once auth state is available
+    if (role === 'Super Admin') {
+      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        if (currentUser) {
+          void loadCompanies();
+        }
+      });
+
+      const handleCompaniesUpdated = () => {
+        void loadCompanies();
+      };
+      window.addEventListener('companiesUpdated', handleCompaniesUpdated);
+
+      return () => {
+        cancelled = true;
+        unsubscribe();
+        window.removeEventListener('companiesUpdated', handleCompaniesUpdated);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role]);
 
   // Add useEffect for click outside handler
   useEffect(() => {

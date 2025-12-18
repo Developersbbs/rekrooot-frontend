@@ -10,12 +10,11 @@ import {
   FiBriefcase,
   FiFileText,
   FiX,
+  FiUser,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
 import CreateCompany from './createCompany';
 import { AnimatePresence } from 'framer-motion';
-
-
 
 
 type SidebarProps = {
@@ -49,6 +48,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
       ...(userRole !== 'SuperAdmin'
         ? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const]
         : []),
+      {type: "item", icon: FiUser, label: "Interviewers"}, 
       { type: 'divider' },
       { type: 'item', icon: FiUsers, label: 'Recruiters' },
       { type: 'item', icon: FiBriefcase, label: 'Clients' },

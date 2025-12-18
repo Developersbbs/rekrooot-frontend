@@ -64,7 +64,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           toggleSidebar={toggleSidebar}
         />
         <main
-          className={`pt-16 transition-all duration-300 bg-white/80 dark:bg-gray-900/90`}
+          className={`pt-16 transition-all duration-300 bg-white/20 dark:bg-gray-900/20`}
           style={{ marginLeft: sidebarWidth }}
         >
           <div className="p-6 pl-16">

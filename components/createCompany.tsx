@@ -3,6 +3,9 @@ import { useState, useCallback } from 'react';
 import { MdBusinessCenter } from 'react-icons/md';
 import { HiOutlineBuildingOffice2 } from 'react-icons/hi2';
 import { FiX } from 'react-icons/fi';
+import { auth } from '@/lib/firebase';
+import { apiFetch, ApiError } from '@/lib/api';
+import type { FormEvent } from 'react';
 
 
 
@@ -14,17 +17,58 @@ export default function CreateCompany({ onClose }: CreateCompanyProps) {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [companyName, setCompanyName] = useState('');
+    const [error, setError] = useState<string | null>(null);
 
 
-    const handleAddCompany = async (e: React.FormEvent<HTMLFormElement>) => {
+    const handleAddCompany = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        //add new company function
-    }
+
+        if (isSubmitting) return;
+        setError(null);
+        setIsSubmitting(true);
+
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            if (!token) {
+                setError('Not authenticated. Please login again.');
+                return;
+            }
+
+            await apiFetch<{ company: unknown }>("/companies", {
+                method: "POST",
+                token,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: companyName.trim() }),
+            });
+
+            window.dispatchEvent(new CustomEvent('companiesUpdated'));
+
+            resetForm();
+            onClose();
+        } catch (err) {
+            if (err instanceof ApiError) {
+                if (err.status === 409) {
+                    setError(err.message);
+                } else if (err.status === 403) {
+                    setError('You are not allowed to create a company');
+                } else if (err.status === 401) {
+                    setError('Session expired. Please login again.');
+                } else {
+                    setError(err.message);
+                }
+            } else {
+                setError('Failed to create company');
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     // Reset form state
     const resetForm = useCallback(() => {
         setCompanyName('');
         setIsSubmitting(false);
+        setError(null);
     }, []);
 
     const close = useCallback(() => {
@@ -72,6 +116,12 @@ export default function CreateCompany({ onClose }: CreateCompanyProps) {
                     <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
                         Enter the company details to create a new organization
                     </p>
+
+                    {error ? (
+                        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                            {error}
+                        </div>
+                    ) : null}
 
                     <form onSubmit={handleAddCompany} className="space-y-6">
                         <div className="space-y-2">
