@@ -1,7 +1,10 @@
 "use client";
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUserPlus, FiX } from 'react-icons/fi';
+import { apiFetch, ApiError } from '@/lib/api';
+import { auth } from '@/lib/firebase';
+import { Toaster, toast } from 'react-hot-toast';
 
 type NewUserProps = {
     onClose: () => void;
@@ -9,6 +12,11 @@ type NewUserProps = {
 
 type Company = {
     id: string;
+    name: string;
+};
+
+type CompanyDto = {
+    _id: string;
     name: string;
 };
 
@@ -36,6 +44,7 @@ export default function NewUser({ onClose }: NewUserProps) {
     });
 
     const [confirmationMessage, setConfirmationMessage] = useState<string>('');
+    const [errorMessage, setErrorMessage] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // UI preview values
@@ -43,28 +52,42 @@ export default function NewUser({ onClose }: NewUserProps) {
     const regions = useMemo(() => ['East', 'West', 'North', 'South'], []);
     const roles = useMemo<FormState['role'][]>(() => ['Recruiter Admin', 'Lead Recruiter', 'Recruiter'], []);
 
-    const companies = useMemo<Company[]>(
-        () => [
-            { id: 'c1', name: 'Acme Corp' },
-            { id: 'c2', name: 'Rekrooot Labs' },
-            { id: 'c3', name: 'Globex' },
-        ],
-        [],
-    );
+    const [companies, setCompanies] = useState<Company[]>([
+        { id: 'c1', name: 'Acme Corp' },
+        { id: 'c2', name: 'Rekrooot Labs' },
+        { id: 'c3', name: 'Globex' },
+    ]);
 
-    const allLeadRecruiters = useMemo<LeadRecruiter[]>(
-        () => [
-            { id: 'lr1', display_name: 'Anita Sharma', companyId: 'c1' },
-            { id: 'lr2', display_name: 'Rahul Verma', companyId: 'c2' },
-            { id: 'lr3', display_name: 'John Dsouza', companyId: 'c3' },
-        ],
-        [],
-    );
+    useEffect(() => {
+        let cancelled = false;
 
-    const leadRecruiters = useMemo(() => {
-        if (!formData.companyId) return [];
-        return allLeadRecruiters.filter((lr) => lr.companyId === formData.companyId);
-    }, [allLeadRecruiters, formData.companyId]);
+        async function loadCompanies() {
+            if (!isSuperAdmin) return;
+
+            try {
+                const token = await auth.currentUser?.getIdToken();
+                if (!token) return;
+
+                const res = await apiFetch<{ companies: CompanyDto[] }>("/companies", { token });
+                if (cancelled) return;
+
+                const next = (res.companies || []).map((c) => ({ id: c._id, name: c.name }));
+                if (next.length > 0) {
+                    setCompanies(next);
+                }
+            } catch {
+                // Keep fallback sample data
+            }
+        }
+
+        void loadCompanies();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isSuperAdmin]);
+
+
 
     const showRegion = formData.role === 'Recruiter';
 
@@ -74,11 +97,79 @@ export default function NewUser({ onClose }: NewUserProps) {
 
         setIsSubmitting(true);
         setConfirmationMessage('');
+        setErrorMessage('');
 
-        // UI-only: simulate request
-        await new Promise((r) => setTimeout(r, 600));
-        setIsSubmitting(false);
-        setConfirmationMessage('Invitation sent (UI preview).');
+        try {
+            const token = await auth.currentUser?.getIdToken();
+            if (!token) {
+                setErrorMessage('Not authenticated. Please login again.');
+                return;
+            }
+
+            if (!formData.companyId) {
+                setErrorMessage('Please select a company.');
+                return;
+            }
+
+            if (!formData.role) {
+                setErrorMessage('Please select a role.');
+                return;
+            }
+
+            const payload: {
+                email: string;
+                company_id: string;
+                team_id?: string | null;
+                role: FormState['role'];
+            } = {
+                email: formData.email,
+                company_id: formData.companyId,
+                role: formData.role,
+            };
+
+            const res = await apiFetch<{
+                invitation: { token: string };
+                invite_url?: string;
+                mail_sent?: boolean;
+                mail_error?: string | null;
+            }>("/invitations", {
+                method: 'POST',
+                token,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            const inviteUrl = res.invite_url || `${window.location.origin}/createaccount?token=${res.invitation.token}`;
+
+            if (res.mail_sent) {
+                toast.success('Invitation email sent');
+            } else {
+                toast.error(res.mail_error || 'Invitation created but email was not sent');
+            }
+
+            setConfirmationMessage(inviteUrl);
+        } catch (err) {
+            if (err instanceof ApiError) {
+                if (err.status === 400) {
+                    setErrorMessage(err.message);
+                    toast.error(err.message);
+                } else if (err.status === 401) {
+                    setErrorMessage('Session expired. Please login again.');
+                    toast.error('Session expired. Please login again.');
+                } else if (err.status === 403) {
+                    setErrorMessage('You are not allowed to invite users.');
+                    toast.error('You are not allowed to invite users.');
+                } else {
+                    setErrorMessage(err.message);
+                    toast.error(err.message);
+                }
+            } else {
+                setErrorMessage('Failed to create invitation.');
+                toast.error('Failed to create invitation.');
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleCompanyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -108,7 +199,11 @@ export default function NewUser({ onClose }: NewUserProps) {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={onClose}
         >
-            <div className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800">
+            <Toaster />
+            <div
+                className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {/* Modal Header with Gradient Background */}
                 <div className="relative h-28 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
                     <div className="absolute -bottom-8 left-8">
@@ -203,11 +298,10 @@ export default function NewUser({ onClose }: NewUserProps) {
                                     className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                                     value={formData.leadRecruiterId}
                                     onChange={(e) => setFormData((prev) => ({ ...prev, leadRecruiterId: e.target.value }))}
-                                    required
                                     disabled={isSubmitting || !formData.companyId}
                                 >
                                     <option value="">Select a lead recruiter</option>
-                                    {leadRecruiters.map((lr) => (
+                                    {leadRecruiters?.map((lr:any) => (
                                         <option key={lr.id} value={lr.id}>{lr.display_name}</option>
                                     ))}
                                 </select>
@@ -285,6 +379,12 @@ export default function NewUser({ onClose }: NewUserProps) {
                             </button>
                         </div>
                     </form>
+
+                    {errorMessage && (
+                        <div className="mt-4 text-center text-sm text-red-600 dark:text-red-400">
+                            {errorMessage}
+                        </div>
+                    )}
 
                     {confirmationMessage && (
                         <div className="mt-4 text-center text-sm text-gray-700 dark:text-gray-300">
