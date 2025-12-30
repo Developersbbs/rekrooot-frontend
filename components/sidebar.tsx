@@ -1,6 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 import {
   FiHome,
   FiUsers,
@@ -30,10 +31,12 @@ type MenuItem =
     icon: IconType;
     label: string;
     onClick?: () => void;
+    href?: string;
   }
   | { type: 'divider' };
 
 const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
+  const router = useRouter();
   const [active, setActive] = useState<string>('Dashboard');
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -44,11 +47,11 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
 
   const menuItems = useMemo<MenuItem[]>(() => {
     const base: MenuItem[] = [
-      { type: 'item', icon: FiHome, label: 'Dashboard' },
+      { type: 'item', icon: FiHome, label: 'Dashboard', href: '/admin' },
       ...(userRole === 'SuperAdmin'? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const]: []),
       ...(userRole === 'SuperAdmin'? [{ type: 'item', icon: FiUser, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const]: []),
       ...(userRole !== 'SuperAdmin'? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const]: []),
-      {type: "item", icon: FiUser, label: "Interviewers"}, 
+      { type: 'item', icon: FiUser, label: 'Interviewers', href: '/admin/interviewers' },
       { type: 'divider' },
       { type: 'item', icon: FiUsers, label: 'Recruiters' },
       { type: 'item', icon: FiBriefcase, label: 'Clients' },
@@ -108,6 +111,9 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
                     type="button"
                     onClick={() => {
                       setActive(item.label);
+                      if (item.href) {
+                        router.push(item.href);
+                      }
                       item.onClick?.();
                     }}
                     className={`w-full flex items-center px-4 py-3 rounded-lg transition-all duration-200 group
