@@ -14,6 +14,7 @@ type CreateInterviewerProps = {
     contact?: string;
     zoho_meet_uid?: string;
     skills?: string[];
+    technologies?: string[];
     logo?: string;
   };
 };
@@ -31,7 +32,7 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
   const [profileFileName, setProfileFileName] = useState<string | null>(null);
   const [techSearch, setTechSearch] = useState('');
   const [technologies, setTechnologies] = useState<Technology[]>([]);
-  const [selectedTechIds, setSelectedTechIds] = useState<string[]>([]);
+  const [selectedTechIds, setSelectedTechIds] = useState<string[]>(interviewer?.technologies ?? []);
   const [selectedTechNames, setSelectedTechNames] = useState<string[]>(interviewer?.skills ?? []);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,21 +282,66 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
               className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               placeholder="Search and add technologies"
             />
-            {techSearch && filteredTechnologies.length > 0 && (
-              <div className="absolute z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg text-sm">
-                {filteredTechnologies.map((tech) => (
+            {techSearch && (
+              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg text-sm">
+                {filteredTechnologies.length > 0 ? (
+                  filteredTechnologies.map((tech) => (
+                    <button
+                      key={tech._id}
+                      type="button"
+                      onClick={() => {
+                        handleTechnologyToggle(tech);
+                        setTechSearch('');
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
+                    >
+                      {tech.name}
+                    </button>
+                  ))
+                ) : (
                   <button
-                    key={tech._id}
                     type="button"
-                    onClick={() => {
-                      handleTechnologyToggle(tech);
-                      setTechSearch('');
+                    onClick={async () => {
+                      if (!techSearch.trim()) return;
+
+                      try {
+                        const user = auth.currentUser;
+                        if (!user) {
+                          throw new Error("You must be logged in to add technologies.");
+                        }
+
+                        const token = await user.getIdToken();
+                        const res = await apiFetch<{ technology: Technology }>("/technologies", {
+                          method: "POST",
+                          token,
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ name: techSearch.trim() }),
+                        });
+
+                        setTechnologies((prev) => [res.technology, ...prev]);
+                        handleTechnologyToggle(res.technology);
+                        setTechSearch('');
+                      } catch (err) {
+                        // Surface error in main error state while keeping dropdown usable
+                        if (err instanceof ApiError) {
+                          setError(err.message);
+                        } else if (err instanceof Error) {
+                          setError(err.message);
+                        } else {
+                          setError("Failed to add technology");
+                        }
+                      }
                     }}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
+                    className="w-full text-left px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2"
                   >
-                    {tech.name}
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-gray-400 dark:border-gray-500 text-[10px]">+</span>
+                    <span>
+                      Add
+                      <span className="font-semibold"> "{techSearch.trim()}" </span>
+                      as new technology
+                    </span>
                   </button>
-                ))}
+                )}
               </div>
             )}
           </div>

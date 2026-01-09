@@ -1,0 +1,157 @@
+/* Base calendar styles */
+.react-calendar {
+  border: none !important;
+  background: transparent !important;
+  font-family: inherit !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  line-height: 1.125em !important;
+}
+
+/* Navigation section */
+.react-calendar__navigation {
+  margin-bottom: 1rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+/* Month view weekdays */
+.react-calendar__month-view__weekdays {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+  text-align: center !important;
+  text-transform: uppercase !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  padding: 0.5rem 0 !important;
+}
+
+.react-calendar__month-view__weekdays__weekday {
+  padding: 0.5rem !important;
+  color: #6B7280 !important;
+}
+
+/* Dark mode weekdays */
+.dark .react-calendar__month-view__weekdays__weekday {
+  color: #9CA3AF !important;
+}
+
+/* Weekend days styling */
+.react-calendar__month-view__weekdays__weekday:first-child,
+.react-calendar__month-view__weekdays__weekday:last-child {
+  color: #EF4444 !important; /* Red color for weekends */
+}
+
+.dark .react-calendar__month-view__weekdays__weekday:first-child,
+.dark .react-calendar__month-view__weekdays__weekday:last-child {
+  color: #F87171 !important; /* Lighter red for dark mode */
+}
+
+/* Days grid */
+.react-calendar__month-view__days {
+  display: grid !important;
+  grid-template-columns: repeat(7, 1fr) !important;
+}
+
+/* Calendar tiles */
+.react-calendar__tile {
+  padding: 0.75rem !important;
+  background: none !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+  color: #1F2937 !important; /* Dark gray for light mode */
+}
+
+/* Dark mode tiles */
+.dark .react-calendar__tile {
+  color: #E5E7EB !important; /* Light gray for dark mode */
+}
+
+/* Hover states */
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.dark .react-calendar__tile:enabled:hover,
+.dark .react-calendar__tile:enabled:focus {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Weekend days */
+.react-calendar__month-view__days__day--weekend {
+  color: #EF4444 !important; /* Red for weekends */
+}
+
+.dark .react-calendar__month-view__days__day--weekend {
+  color: #F87171 !important; /* Lighter red for dark mode */
+}
+
+/* Active tile */
+.react-calendar__tile--active {
+  background-color: var(--primary-500) !important;
+  color: white !important;
+}
+
+.react-calendar__tile--active:enabled:hover,
+.react-calendar__tile--active:enabled:focus {
+  background-color: var(--primary-600) !important;
+}
+
+/* Today's tile */
+.react-calendar__tile--now {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  font-weight: bold !important;
+}
+
+.dark .react-calendar__tile--now {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Neighbor month tiles */
+.react-calendar__month-view__days__day--neighboringMonth {
+  opacity: 0.5 !important;
+}
+
+/* Disabled tiles */
+.react-calendar__tile:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  background-color: transparent !important;
+}
+
+/* Navigation buttons */
+.react-calendar__navigation button {
+  min-width: 44px !important;
+  background: none !important;
+  font-size: 16px !important;
+  padding: 8px !important;
+  border-radius: 9999px !important;
+  color: #1F2937 !important; /* Dark gray for light mode */
+}
+
+/* Dark mode navigation buttons */
+.dark .react-calendar__navigation button {
+  color: #E5E7EB !important; /* Light gray for dark mode */
+}
+
+.react-calendar__navigation button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Navigation arrows container */
+.react-calendar__navigation__arrow {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Calendar container */
+.react-calendar__viewContainer {
+  padding: 1rem 0 !important;
+} 

@@ -30,6 +30,7 @@ type Interviewer = {
   contact?: string;
   logo?: string;
   skills?: string[];
+  technologies?: string[];
 };
 
 const InterviewerImage = ({ src, alt, className }: { src?: string; alt: string; className?: string }) => {
@@ -245,7 +246,7 @@ const InterviewersPage = () => {
                 {/* Footer actions */}
                 <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800 mt-1">
                   <Link
-                    href={`/admin/interviewerprofile/${interviewer._id}`}
+                    href={`/admin/interviewers/${interviewer._id}`}
                     className="inline-flex items-center gap-2 text-xs font-medium text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300"
                   >
                     <span>View profile</span>
