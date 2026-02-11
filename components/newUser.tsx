@@ -43,6 +43,8 @@ export default function NewUser({ onClose }: NewUserProps) {
         region: '',
     });
 
+    const [leadRecruiters, setLeadRecruiters] = useState<LeadRecruiter[]>([]);
+    const [isLoadingLeadRecruiters, setIsLoadingLeadRecruiters] = useState(false);
     const [confirmationMessage, setConfirmationMessage] = useState<string>('');
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,9 +55,7 @@ export default function NewUser({ onClose }: NewUserProps) {
     const roles = useMemo<FormState['role'][]>(() => ['Recruiter Admin', 'Lead Recruiter', 'Recruiter'], []);
 
     const [companies, setCompanies] = useState<Company[]>([
-        { id: 'c1', name: 'Acme Corp' },
-        { id: 'c2', name: 'Rekrooot Labs' },
-        { id: 'c3', name: 'Globex' },
+
     ]);
 
     useEffect(() => {
@@ -86,6 +86,43 @@ export default function NewUser({ onClose }: NewUserProps) {
             cancelled = true;
         };
     }, [isSuperAdmin]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadLeadRecruiters() {
+            if (!formData.companyId) {
+                setLeadRecruiters([]);
+                return;
+            }
+
+            try {
+                setIsLoadingLeadRecruiters(true);
+                const token = await auth.currentUser?.getIdToken();
+                if (!token) return;
+
+                const res = await apiFetch<{ leadRecruiters: any[] }>(`/users/lead-recruiters?company_id=${formData.companyId}`, { token });
+                if (cancelled) return;
+
+                const list = (res.leadRecruiters || []).map((u) => ({
+                    id: u._id,
+                    display_name: u.username || u.email,
+                    companyId: formData.companyId
+                }));
+                setLeadRecruiters(list);
+            } catch (err) {
+                console.error("Failed to load lead recruiters:", err);
+            } finally {
+                setIsLoadingLeadRecruiters(false);
+            }
+        }
+
+        void loadLeadRecruiters();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [formData.companyId]);
 
 
 
@@ -276,43 +313,44 @@ export default function NewUser({ onClose }: NewUserProps) {
                                 User Role
                             </label>
                             <select
-                                className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                                className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 value={formData.role}
                                 onChange={handleRoleChange}
                                 required
-                                disabled={isSubmitting}
+                                disabled={isSubmitting || (isSuperAdmin && !formData.companyId)}
                             >
                                 <option value="">Select a role</option>
                                 {roles.map((r) => (
                                     <option key={r} value={r}>{r}</option>
                                 ))}
                             </select>
+
                         </div>
 
                         {formData.role === 'Recruiter' && (
-                            <div className="space-y-1.5">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Lead Recruiter
-                                </label>
-                                <select
-                                    className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                                    value={formData.leadRecruiterId}
-                                    onChange={(e) => setFormData((prev) => ({ ...prev, leadRecruiterId: e.target.value }))}
-                                    disabled={isSubmitting || !formData.companyId}
-                                >
-                                    <option value="">Select a lead recruiter</option>
-                                    {leadRecruiters?.map((lr:any) => (
-                                        <option key={lr.id} value={lr.id}>{lr.display_name}</option>
-                                    ))}
-                                </select>
-                                {!formData.companyId ? (
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">Select a company first.</div>
-                                ) : null}
-                            </div>
-                        )}
+                            <>
+                                <div className="space-y-1.5">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Lead Recruiter
+                                    </label>
+                                    <select
+                                        className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                                        value={formData.leadRecruiterId}
+                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData((prev) => ({ ...prev, leadRecruiterId: e.target.value }))}
+                                        disabled={isSubmitting || !formData.companyId || isLoadingLeadRecruiters}
+                                    >
+                                        <option value="">
+                                            {isLoadingLeadRecruiters ? 'Loading...' : 'Select a lead recruiter'}
+                                        </option>
+                                        {leadRecruiters.map((lr: LeadRecruiter) => (
+                                            <option key={lr.id} value={lr.id}>{lr.display_name}</option>
+                                        ))}
+                                    </select>
+                                    {!formData.companyId ? (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">Select a company first.</div>
+                                    ) : null}
+                                </div>
 
-                        <AnimatePresence>
-                            {showRegion && (
                                 <motion.div
                                     initial={{ height: 0, opacity: 0 }}
                                     animate={{ height: 'auto', opacity: 1 }}
@@ -321,7 +359,7 @@ export default function NewUser({ onClose }: NewUserProps) {
                                     className="space-y-1.5"
                                 >
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Region
+                                        Region (Optional)
                                     </label>
                                     <select
                                         className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
@@ -335,8 +373,8 @@ export default function NewUser({ onClose }: NewUserProps) {
                                         ))}
                                     </select>
                                 </motion.div>
-                            )}
-                        </AnimatePresence>
+                            </>
+                        )}
 
                         <div className="flex flex-col space-y-3 pt-2">
                             <motion.button
@@ -386,11 +424,6 @@ export default function NewUser({ onClose }: NewUserProps) {
                         </div>
                     )}
 
-                    {confirmationMessage && (
-                        <div className="mt-4 text-center text-sm text-gray-700 dark:text-gray-300">
-                            {confirmationMessage}
-                        </div>
-                    )}
                 </div>
             </div>
         </motion.div>

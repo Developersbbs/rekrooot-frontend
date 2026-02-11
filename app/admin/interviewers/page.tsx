@@ -63,19 +63,18 @@ const InterviewersPage = () => {
   const [isClient, setIsClient] = useState(false)
   const [editingInterviewer, setEditingInterviewer] = useState<Interviewer | null>(null);
 
+  const [selectedCompany, setSelectedCompany] = useState<any>(null);
+
   const fetchInterviewers = useCallback(async () => {
     setError(null);
     setIsLoading(true);
 
     try {
       let token: string | null = null;
-
-      // Prefer live Firebase user token when available
       const user = auth.currentUser;
       if (user) {
         token = await user.getIdToken();
       } else if (typeof window !== "undefined") {
-        // Fallback to stored token for cases where auth state isn't hydrated yet after reload
         token = localStorage.getItem("auth_token");
       }
 
@@ -83,7 +82,12 @@ const InterviewersPage = () => {
         throw new Error("You must be logged in to view interviewers.");
       }
 
-      const res = await apiFetch<{ interviewers: Interviewer[] }>("/interviewers", {
+      let url = "/interviewers";
+      if (selectedCompany?.id && selectedCompany.id !== "all") {
+        url += `?company_id=${selectedCompany.id}`;
+      }
+
+      const res = await apiFetch<{ interviewers: Interviewer[] }>(url, {
         token,
       });
 
@@ -99,6 +103,36 @@ const InterviewersPage = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [selectedCompany]);
+
+  useEffect(() => {
+    const loadInitialCompany = () => {
+      const getCookie = (name: string) => {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop()?.split(';').shift();
+      };
+      const selectedCompanyCookie = getCookie('selectedCompany');
+      if (selectedCompanyCookie) {
+        try {
+          const company = JSON.parse(decodeURIComponent(selectedCompanyCookie));
+          setSelectedCompany(company);
+        } catch (e) {
+          console.error('Error parsing selectedCompany cookie:', e);
+        }
+      }
+    };
+
+    const handleCompanyChange = (e: any) => {
+      setSelectedCompany(e.detail);
+    };
+
+    loadInitialCompany();
+    window.addEventListener('companyChanged', handleCompanyChange);
+
+    return () => {
+      window.removeEventListener('companyChanged', handleCompanyChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -283,7 +317,7 @@ const InterviewersPage = () => {
       {/* Modal */}
       {showModal && isClient && (
         <div className="fixed inset-0 flex justify-center items-center bg-black/50 z-50">
-          <NewInterviewer 
+          <NewInterviewer
             onClose={handleModalClose}
             onInterviewerAdded={fetchInterviewers}
             interviewer={editingInterviewer ?? undefined}

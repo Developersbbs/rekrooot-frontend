@@ -30,6 +30,10 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
   const [phone, setPhone] = useState(interviewer?.contact ?? '');
   const [zohoUid, setZohoUid] = useState(interviewer?.zoho_meet_uid ?? '');
   const [profileFileName, setProfileFileName] = useState<string | null>(null);
+  const [profileFile, setProfileFile] = useState<File | null>(null);
+  const [profilePreview, setProfilePreview] = useState<string | null>(
+    typeof interviewer?.logo === 'string' ? interviewer.logo : null
+  );
   const [techSearch, setTechSearch] = useState('');
   const [technologies, setTechnologies] = useState<Technology[]>([]);
   const [selectedTechIds, setSelectedTechIds] = useState<string[]>(interviewer?.technologies ?? []);
@@ -95,6 +99,23 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
 
       const token = await user.getIdToken();
 
+      let logoUrl = interviewer?.logo;
+      if (profileFile) {
+        try {
+          const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+          const { storage } = await import('@/lib/firebase');
+
+          const storageRef = ref(storage, `interviewers/${Date.now()}_${profileFile.name}`);
+          const snapshot = await uploadBytes(storageRef, profileFile);
+          logoUrl = await getDownloadURL(snapshot.ref);
+        } catch (uploadError) {
+          console.error("Error uploading image:", uploadError);
+          setError("Failed to upload image. Please try again.");
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const payload = {
         name: name.trim(),
         email: email.trim(),
@@ -103,7 +124,7 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
         // Send both human-readable skills and referenced technology IDs
         skills: selectedTechNames,
         technologies: selectedTechIds,
-        logo: undefined,
+        logo: logoUrl || undefined,
       };
 
       if (interviewer?._id) {
@@ -157,8 +178,16 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
             Profile Picture
           </label>
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-300 dark:border-gray-700">
-              {profileFileName ? profileFileName.charAt(0).toUpperCase() : 'IMG'}
+            <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-sm text-gray-400 border border-dashed border-gray-300 dark:border-gray-700 overflow-hidden relative">
+              {profilePreview ? (
+                <img
+                  src={profilePreview}
+                  alt="Profile Preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                profileFileName ? profileFileName.charAt(0).toUpperCase() : 'IMG'
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <label className="inline-flex items-center justify-center px-3 py-2 text-xs font-medium rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
@@ -169,7 +198,13 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    setProfileFileName(file ? file.name : null);
+                    if (file) {
+                      setProfileFile(file);
+                      setProfileFileName(file.name);
+                      // Create a preview URL
+                      const previewUrl = URL.createObjectURL(file);
+                      setProfilePreview(previewUrl);
+                    }
                   }}
                 />
               </label>

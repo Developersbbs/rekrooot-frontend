@@ -1,11 +1,13 @@
 'use client';
-import React, { useMemo, useState } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, PieChart, Pie, Cell,
   ResponsiveContainer
 } from 'recharts';
 import { motion } from 'framer-motion';
+import { apiFetch } from '@/lib/api';
+import { auth } from '@/lib/firebase';
 
 
 type StatState = {
@@ -42,67 +44,98 @@ type InterviewRow = {
 
 function DashboardPage() {
   const [filterDate, setFilterDate] = useState<'today' | 'tomorrow'>('today');
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<StatState>({
+    totalJobs: 0,
+    totalClients: 0,
+    totalVendors: 0,
+    appliedCandidates: 0,
+    selectedCandidates: 0,
+    rejectedCandidates: 0,
+  });
 
-  const stats: StatState = {
-    totalJobs: 48,
-    totalClients: 12,
-    totalVendors: 7,
-    appliedCandidates: 186,
-    selectedCandidates: 23,
-    rejectedCandidates: 41,
-  };
+  const [monthlyTrends, setMonthlyTrends] = useState<MonthlyTrend[]>([]);
+  const [candidateStatusData, setCandidateStatusData] = useState<CandidateStatusDatum[]>([]);
+  const [interviews, setInterviews] = useState<InterviewRow[]>([]);
 
-  const monthlyTrends: MonthlyTrend[] = [
-    { month: 'Jan', interviews: 12, hired: 3 },
-    { month: 'Feb', interviews: 18, hired: 4 },
-    { month: 'Mar', interviews: 25, hired: 8 },
-    { month: 'Apr', interviews: 21, hired: 6 },
-    { month: 'May', interviews: 29, hired: 9 },
-    { month: 'Jun', interviews: 24, hired: 7 },
-  ];
+  useEffect(() => {
+    let cancelled = false;
 
-  const candidateStatusData: CandidateStatusDatum[] = [
-    { name: 'Applied', value: 120 },
-    { name: 'Scheduled', value: 28 },
-    { name: 'Selected', value: 23 },
-    { name: 'Rejected', value: 41 },
-  ];
+    async function loadStats() {
+      try {
+        setLoading(true);
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
 
-  const interviews: InterviewRow[] = [
-    {
-      id: 'i1',
-      candidateName: 'Aarav Mehta',
-      email: 'aarav.mehta@example.com',
-      primaryContact: '+91 90000 11111',
-      jobName: 'Frontend Developer',
-      clientName: 'Acme Corp',
-      vendorName: 'TalentBridge',
-      dateISO: new Date().toISOString(),
-      status: 'pending',
-    },
-    {
-      id: 'i2',
-      candidateName: 'Sara Khan',
-      email: 'sara.khan@example.com',
-      primaryContact: '+91 90000 22222',
-      jobName: 'Node.js Developer',
-      clientName: 'Rekrooot Labs',
-      vendorName: 'HireFast',
-      dateISO: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-      status: 'pending',
-    },
-    {
-      id: 'i3',
-      candidateName: 'John Dsouza',
-      email: 'john.dsouza@example.com',
-      primaryContact: '+91 90000 33333',
-      jobName: 'QA Engineer',
-      clientName: 'Globex',
-      vendorName: 'TalentBridge',
-      dateISO: new Date().toISOString(),
-      status: 'completed',
-    },
-  ];
+        // Get selected company from cookie (same as header)
+        const getCookie = (name: string) => {
+          const value = `; ${document.cookie}`;
+          const parts = value.split(`; ${name}=`);
+          if (parts.length === 2) return parts.pop()?.split(';').shift();
+        };
+        const selectedCompanyCookie = getCookie('selectedCompany');
+        let companyId = '';
+        if (selectedCompanyCookie) {
+          try {
+            const company = JSON.parse(decodeURIComponent(selectedCompanyCookie));
+            if (company.id && company.id !== 'all') {
+              companyId = company.id;
+            }
+          } catch (e) {
+            console.error('Error parsing selectedCompany cookie:', e);
+          }
+        }
+
+        let url = "/dashboard/stats";
+        if (companyId) {
+          url += `?company_id=${companyId}`;
+        }
+
+        const res = await apiFetch<{
+          stats: StatState;
+          monthlyTrends: MonthlyTrend[];
+          candidateStatusData: CandidateStatusDatum[];
+          recentInterviews: InterviewRow[];
+        }>(url, { token });
+
+        if (cancelled) return;
+
+        setStats(res.stats);
+        setMonthlyTrends(res.monthlyTrends);
+        setCandidateStatusData(res.candidateStatusData);
+        setInterviews(res.recentInterviews);
+      } catch (err) {
+        console.error("Failed to load dashboard stats:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    const handleCompanyChange = () => {
+      void loadStats();
+    };
+
+    window.addEventListener('companyChanged', handleCompanyChange);
+
+    if (auth.currentUser) {
+      void loadStats();
+    } else {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) void loadStats();
+        else setLoading(false);
+      });
+      return () => {
+        cancelled = true;
+        unsubscribe();
+        window.removeEventListener('companyChanged', handleCompanyChange);
+      };
+    }
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('companyChanged', handleCompanyChange);
+    };
+  }, []);
 
   const filteredInterviews = useMemo(() => {
     const today = new Date();
@@ -131,25 +164,29 @@ function DashboardPage() {
     transition: { duration: 0.5 }
   };
 
+  if (loading) {
+    return <div className="p-6 text-center">Loading dashboard...</div>;
+  }
+
   return (
     <div className="p-6 bg-gradient-to-br min-h-screen">
-      <motion.h1 
+      <motion.h1
         className="text-4xl font-bold text-gray-800 dark:text-gray-100 mb-8 relative"
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
       >
         Dashboard
       </motion.h1>
-      
+
       {/* Stats Counter Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-8">
         {[
           { title: 'Total Jobs', value: stats.totalJobs, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          { title: 'Total Clients', value: stats.totalClients, bgColor: 'bg-accent-50 dark:bg-accent-900/30', textColor: 'text-accent-700 dark:text-accent-300' },
-          { title: 'Total Vendors', value: stats.totalVendors, bgColor: 'bg-gray-50 dark:bg-gray-900/30', textColor: 'text-gray-700 dark:text-gray-300' },
+          {title:"Total Clients", value:stats.totalClients, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'},
+          {title:"Total Vendors", value:stats.totalVendors, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'},
           { title: 'Applied Candidates', value: stats.appliedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          { title: 'Selected Candidates', value: stats.selectedCandidates, bgColor: 'bg-accent-50 dark:bg-accent-900/30', textColor: 'text-accent-700 dark:text-accent-300' },
-          { title: 'Rejected Candidates', value: stats.rejectedCandidates, bgColor: 'bg-gray-50 dark:bg-gray-900/30', textColor: 'text-gray-700 dark:text-gray-300' }
+          {title:'Selected Candidates',value:stats.selectedCandidates,bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'},
+          {title:'Rejected Candidates',value:stats.rejectedCandidates,bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'}
         ].map((stat, index) => (
           <motion.div
             key={stat.title}
@@ -160,7 +197,7 @@ function DashboardPage() {
             whileHover={{ scale: 1.02 }}
           >
             <h3 className="text-gray-700 dark:text-gray-200 text-sm font-medium mb-2">{stat.title}</h3>
-            <p className={`text-4xl font-bold ${stat.textColor} flex items-end`}>
+            <p className={`text-3xl font-bold ${stat.textColor} flex items-end`}>
               {stat.value}
               <span className="text-sm text-gray-600 dark:text-gray-400 ml-2 mb-1">items</span>
             </p>
@@ -171,7 +208,7 @@ function DashboardPage() {
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         {/* Line Chart */}
-        <motion.div 
+        <motion.div
           className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-6 rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50"
           {...fadeInUp}
         >
@@ -182,16 +219,16 @@ function DashboardPage() {
           <div className="h-[300px] [&_.recharts-wrapper]:!w-full [&_.recharts-surface]:!w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData}>
-                <CartesianGrid 
-                  strokeDasharray="3 3" 
-                  stroke="currentColor" 
-                  opacity={0.1} 
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="currentColor"
+                  opacity={0.1}
                   vertical={false}
                 />
-                <XAxis 
-                  dataKey="month" 
-                  stroke="currentColor" 
-                  tick={{ 
+                <XAxis
+                  dataKey="month"
+                  stroke="currentColor"
+                  tick={{
                     fill: 'currentColor',
                     fontSize: 12,
                     fontWeight: 500
@@ -200,9 +237,9 @@ function DashboardPage() {
                   tickLine={{ stroke: 'currentColor', opacity: 0.2 }}
                   padding={{ left: 10, right: 10 }}
                 />
-                <YAxis 
+                <YAxis
                   stroke="currentColor"
-                  tick={{ 
+                  tick={{
                     fill: 'currentColor',
                     fontSize: 12,
                     fontWeight: 500
@@ -210,8 +247,8 @@ function DashboardPage() {
                   axisLine={{ stroke: 'currentColor', opacity: 0.2 }}
                   tickLine={{ stroke: 'currentColor', opacity: 0.2 }}
                 />
-                <Tooltip 
-                  contentStyle={{ 
+                <Tooltip
+                  contentStyle={{
                     backgroundColor: 'rgba(255, 255, 255, 0.95)',
                     border: 'none',
                     borderRadius: '8px',
@@ -219,17 +256,17 @@ function DashboardPage() {
                     color: '#1f2937',
                     padding: '12px'
                   }}
-                  labelStyle={{ 
+                  labelStyle={{
                     color: '#374151',
                     fontWeight: 600,
                     marginBottom: '4px'
                   }}
-                  itemStyle={{ 
+                  itemStyle={{
                     color: '#374151',
                     padding: '4px 0'
                   }}
                 />
-                <Legend 
+                <Legend
                   verticalAlign="top"
                   height={36}
                   formatter={(value: string) => (
@@ -238,35 +275,35 @@ function DashboardPage() {
                     </span>
                   )}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="interviews" 
-                  stroke="#2f4858" 
+                <Line
+                  type="monotone"
+                  dataKey="interviews"
+                  stroke="#2f4858"
                   strokeWidth={2}
-                  dot={{ 
-                    strokeWidth: 2, 
+                  dot={{
+                    strokeWidth: 2,
                     fill: '#fff',
                     r: 4
                   }}
-                  activeDot={{ 
-                    r: 6, 
+                  activeDot={{
+                    r: 6,
                     strokeWidth: 2,
                     stroke: '#2f4858',
                     fill: '#fff'
                   }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="hired" 
-                  stroke="#fb8404" 
+                <Line
+                  type="monotone"
+                  dataKey="hired"
+                  stroke="#fb8404"
                   strokeWidth={2}
-                  dot={{ 
-                    strokeWidth: 2, 
+                  dot={{
+                    strokeWidth: 2,
                     fill: '#fff',
                     r: 4
                   }}
-                  activeDot={{ 
-                    r: 6, 
+                  activeDot={{
+                    r: 6,
                     strokeWidth: 2,
                     stroke: '#fb8404',
                     fill: '#fff'
@@ -278,7 +315,7 @@ function DashboardPage() {
         </motion.div>
 
         {/* Pie Chart */}
-        <motion.div 
+        <motion.div
           className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-6 rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50"
           {...fadeInUp}
         >
@@ -306,15 +343,15 @@ function DashboardPage() {
                   labelLine={{ stroke: 'currentColor', strokeWidth: 0.5 }}
                 >
                   {candidateStatusData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
+                    <Cell
+                      key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}
                       className="hover:opacity-80 transition-opacity"
                     />
                   ))}
                 </Pie>
-                <Tooltip 
-                  contentStyle={{ 
+                <Tooltip
+                  contentStyle={{
                     backgroundColor: 'rgba(255, 255, 255, 0.95)',
                     border: 'none',
                     borderRadius: '8px',
@@ -324,8 +361,8 @@ function DashboardPage() {
                   labelStyle={{ color: '#374151' }}
                   itemStyle={{ color: '#374151' }}
                 />
-                <Legend 
-                  verticalAlign="bottom" 
+                <Legend
+                  verticalAlign="bottom"
                   height={36}
                   formatter={(value: string) => (
                     <span className="text-gray-700 dark:text-gray-300">{value}</span>
@@ -338,7 +375,7 @@ function DashboardPage() {
       </div>
 
       {/* Recent Interviews Table */}
-      <motion.div 
+      <motion.div
         className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-6 rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50"
         {...fadeInUp}
       >
@@ -350,21 +387,19 @@ function DashboardPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setFilterDate('today')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterDate === 'today' 
-                  ? 'bg-primary-500 text-white' 
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filterDate === 'today'
+                ? 'bg-primary-500 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
             >
               Today
             </button>
             <button
               onClick={() => setFilterDate('tomorrow')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filterDate === 'tomorrow' 
-                  ? 'bg-primary-500 text-white' 
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filterDate === 'tomorrow'
+                ? 'bg-primary-500 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
             >
               Tomorrow
             </button>
@@ -410,11 +445,10 @@ function DashboardPage() {
                       {new Date(interview.dateISO).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        interview.status === 'completed' 
-                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                          : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-                      }`}>
+                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${interview.status === 'completed'
+                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                        }`}>
                         {interview.status}
                       </span>
                     </td>

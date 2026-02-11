@@ -72,11 +72,11 @@ type ScheduledInterview = {
   status: string;
 };
 
-const EditModal = ({ isOpen, onClose, initialData, onSave, isSaving, imagePreview, onImageChange }: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  initialData: InterviewerProfile; 
-  onSave: (data: InterviewerProfile) => void; 
+const EditModal = ({ isOpen, onClose, initialData, onSave, isSaving, imagePreview, onImageChange }: {
+  isOpen: boolean;
+  onClose: () => void;
+  initialData: InterviewerProfile;
+  onSave: (data: InterviewerProfile) => void;
   isSaving: boolean;
   imagePreview: string;
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -258,8 +258,8 @@ const CustomCalendar = ({ value, onChange, availabilitySlots, className }: any) 
           hover:bg-primary-50 dark:hover:bg-primary-900/20
           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
           rounded-lg transition-all duration-200
-          ${hasSlots 
-            ? 'font-bold text-primary-600 dark:text-primary-300' 
+          ${hasSlots
+            ? 'font-bold text-primary-600 dark:text-primary-300'
             : 'text-gray-600 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white'}
         `;
       }}
@@ -293,7 +293,7 @@ const CustomCalendar = ({ value, onChange, availabilitySlots, className }: any) 
 };
 
 // Helper function to format weekday names
-const formatWeekday = (date:any) => {
+const formatWeekday = (date: any) => {
   const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return weekdays[date.getDay()];
 };
@@ -362,14 +362,14 @@ const TimeSlotSection = ({ selectedDate, availabilitySlots, onTimeSelect }: { se
   const handleSlotClick = (time: string) => {
     const dateStr = selectedDate.toDateString();
     const currentStatus = availabilitySlots[dateStr]?.[time];
-    
+
     // Don't allow changes if the slot is scheduled
     if (typeof currentStatus === 'string' && currentStatus.startsWith('scheduled:')) return;
-     
-    const newStatus = currentStatus === SlotStatus.UNAVAILABLE 
-      ? SlotStatus.AVAILABLE 
+
+    const newStatus = currentStatus === SlotStatus.UNAVAILABLE
+      ? SlotStatus.AVAILABLE
       : SlotStatus.UNAVAILABLE;
-    
+
     onTimeSelect(dateStr, {
       ...availabilitySlots[dateStr],
       [time]: newStatus
@@ -379,7 +379,7 @@ const TimeSlotSection = ({ selectedDate, availabilitySlots, onTimeSelect }: { se
   const getSlotStatus = (time: string) => {
     const dateStr = selectedDate.toDateString();
     const status = availabilitySlots[dateStr]?.[time];
-    
+
     if (status === 'available') return SlotStatus.AVAILABLE;
     if (status === 'unavailable') return SlotStatus.UNAVAILABLE;
     // If status is neither 'available' nor 'unavailable', it's a candidate ID
@@ -390,8 +390,15 @@ const TimeSlotSection = ({ selectedDate, availabilitySlots, onTimeSelect }: { se
     const time = `${hour.toString().padStart(2, '0')}:00`;
     const status = getSlotStatus(time);
     const styles = STATUS_STYLES[status] || STATUS_STYLES[SlotStatus.UNAVAILABLE];
-    const formattedHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    const period = hour >= 12 ? 'PM' : 'AM';
+
+    // Format start time
+    const startPeriod = hour >= 12 ? 'PM' : 'AM';
+    const displayStartHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+
+    // Format end time
+    const endHour = hour + 1;
+    const endPeriod = endHour >= 24 ? 'AM' : endHour >= 12 ? 'PM' : 'AM';
+    const displayEndHour = endHour >= 24 ? 12 : endHour > 12 ? endHour - 12 : endHour;
 
     const isScheduled = status === SlotStatus.SCHEDULED;
     const rawStatus = availabilitySlots[selectedDate.toDateString()]?.[time];
@@ -421,10 +428,7 @@ const TimeSlotSection = ({ selectedDate, availabilitySlots, onTimeSelect }: { se
         `}
       >
         <span className="text-sm font-medium">
-          {`${formattedHour}:00`}
-        </span>
-        <span className="text-xs opacity-75">
-          {period}
+          {`${displayStartHour} ${startPeriod} - ${displayEndHour} ${endPeriod}`}
         </span>
 
         {isScheduled && (
@@ -542,33 +546,8 @@ const InterviewerProfilePage = () => {
   // Add this for time-sensitive content
   const [mounted, setMounted] = useState(false)
 
-  // Mock scheduled interviews for UI
-  const [scheduledInterviews] = useState<ScheduledInterview[]>([
-    {
-      id: '1',
-      candidateId: 'c1',
-      candidate: {
-        name: 'Rohit Verma',
-        email: 'rohit.verma@example.com',
-        phone: '+91 98765 00001',
-      },
-      dateTime: new Date(new Date().setHours(new Date().getHours() + 2)),
-      timeSlot: '10:00',
-      status: 'scheduled',
-    },
-    {
-      id: '2',
-      candidateId: 'c2',
-      candidate: {
-        name: 'Priya Singh',
-        email: 'priya.singh@example.com',
-        phone: '+91 98765 00002',
-      },
-      dateTime: new Date(new Date().setDate(new Date().getDate() + 1)),
-      timeSlot: '15:00',
-      status: 'scheduled',
-    },
-  ]);
+  const [scheduledInterviews, setScheduledInterviews] = useState<ScheduledInterview[]>([]);
+  const [isLoadingInterviews, setIsLoadingInterviews] = useState(false);
   const [selectedInterviewDate, setSelectedInterviewDate] = useState<Date | null>(null);
 
   // Declare selectedTime state (not used but kept for potential UI extensions)
@@ -620,8 +599,8 @@ const InterviewerProfilePage = () => {
 
         const technologies: string[] = Array.isArray(backend.technologies)
           ? (backend.technologies as any[]).map((t) =>
-              typeof t === 'string' ? t : t.name
-            )
+            typeof t === 'string' ? t : t.name
+          )
           : [];
 
         const mapped: InterviewerProfile = {
@@ -648,6 +627,49 @@ const InterviewerProfilePage = () => {
     };
 
     void loadInterviewer();
+  }, [interviewerId]);
+
+  // Load scheduled interviews from backend
+  useEffect(() => {
+    const loadInterviews = async () => {
+      if (!interviewerId) return;
+
+      try {
+        setIsLoadingInterviews(true);
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+
+        const res = await apiFetch<{ interviews: any[] }>(`/interviewers/${interviewerId}/interviews`, { token });
+
+        const mapped = res.interviews.map(i => ({
+          id: i._id,
+          candidateId: i._id, // placeholder
+          candidate: {
+            name: i.candidate_name,
+            email: i.candidate_email,
+            phone: i.candidate_phone
+          },
+          dateTime: new Date(i.date_time),
+          timeSlot: new Date(i.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          status: i.status
+        }));
+
+        setScheduledInterviews(mapped);
+      } catch (err) {
+        console.error("Failed to load interviews:", err);
+      } finally {
+        setIsLoadingInterviews(false);
+      }
+    };
+
+    if (auth.currentUser) {
+      void loadInterviews();
+    } else {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) void loadInterviews();
+      });
+      return () => unsubscribe();
+    }
   }, [interviewerId]);
 
   // Load availability for the selected date from backend when possible
@@ -785,51 +807,27 @@ const InterviewerProfilePage = () => {
         const dateKey = selectedDate.toDateString();
         const daySlots = availabilitySlots[dateKey] || {};
 
-        // Build contiguous AVAILABLE intervals as UTC datetimes
+        // Create separate 1-hour intervals for each available slot
         const sortedLabels = Object.keys(daySlots).sort();
         const intervals: { start_time: string; end_time: string }[] = [];
 
-        let currentStartLabel: string | null = null;
-        let previousLabel: string | null = null;
-
-        const flushInterval = () => {
-          if (!currentStartLabel || !previousLabel) return;
-
-          const [startHourStr] = currentStartLabel.split(':');
-          const [endHourStr] = previousLabel.split(':');
-
-          const startHour = parseInt(startHourStr, 10);
-          const endHour = parseInt(endHourStr, 10) + 1; // end is non-inclusive
-
-          const startLocal = new Date(selectedDate);
-          startLocal.setHours(startHour, 0, 0, 0);
-          const endLocal = new Date(selectedDate);
-          endLocal.setHours(endHour, 0, 0, 0);
-
-          intervals.push({
-            start_time: startLocal.toISOString(),
-            end_time: endLocal.toISOString(),
-          });
-        };
-
         for (const label of sortedLabels) {
           const status = daySlots[label];
-          const isAvailable = status === SlotStatus.AVAILABLE;
+          if (status === SlotStatus.AVAILABLE) {
+            const [hourStr] = label.split(':');
+            const hour = parseInt(hourStr, 10);
 
-          if (isAvailable) {
-            if (currentStartLabel === null) {
-              currentStartLabel = label;
-            }
-            previousLabel = label;
-          } else if (currentStartLabel !== null) {
-            flushInterval();
-            currentStartLabel = null;
-            previousLabel = null;
+            const startLocal = new Date(selectedDate);
+            startLocal.setHours(hour, 0, 0, 0);
+
+            const endLocal = new Date(selectedDate);
+            endLocal.setHours(hour + 1, 0, 0, 0);
+
+            intervals.push({
+              start_time: startLocal.toISOString(),
+              end_time: endLocal.toISOString(),
+            });
           }
-        }
-
-        if (currentStartLabel !== null && previousLabel !== null) {
-          flushInterval();
         }
 
         try {
@@ -937,7 +935,7 @@ const InterviewerProfilePage = () => {
           <FiEdit3 className="w-5 h-5 
             group-hover:scale-110 
             transition-transform 
-            group-hover:text-primary-600 dark:group-hover:text-primary-200" 
+            group-hover:text-primary-600 dark:group-hover:text-primary-200"
           />
         </button>
       </div>
@@ -969,7 +967,7 @@ const InterviewerProfilePage = () => {
       return scheduledInterviews.filter(interview => interview.dateTime >= now);
     }
 
-    return scheduledInterviews.filter(interview => 
+    return scheduledInterviews.filter(interview =>
       interview.dateTime.toDateString() === selectedInterviewDate.toDateString()
     );
   }, [scheduledInterviews, selectedInterviewDate]);
@@ -979,14 +977,14 @@ const InterviewerProfilePage = () => {
     <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-xl border border-gray-100 dark:border-gray-700">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-transparent">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-white">
             Scheduled Interviews
           </h2>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {filteredInterviews.length} {selectedInterviewDate ? 'interviews on selected date' : 'upcoming interviews'}
           </p>
         </div>
-        
+
         {/* Date filter */}
         <div className="flex items-center gap-2">
           <input
@@ -1006,11 +1004,16 @@ const InterviewerProfilePage = () => {
         </div>
       </div>
 
-      {filteredInterviews.length === 0 ? (
+      {isLoadingInterviews ? (
+        <div className="text-center py-8">
+          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <p className="text-gray-500 dark:text-gray-400 text-sm">Loading interviews...</p>
+        </div>
+      ) : filteredInterviews.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-gray-500 dark:text-gray-400">
-            {selectedInterviewDate 
-              ? 'No interviews scheduled for selected date' 
+            {selectedInterviewDate
+              ? 'No interviews scheduled for selected date'
               : 'No upcoming interviews'}
           </p>
         </div>
@@ -1042,20 +1045,20 @@ const InterviewerProfilePage = () => {
                     )}
                   </div>
                 </div>
-                
+
                 <div className="text-right">
                   <div className="text-lg font-medium text-gray-900 dark:text-white">
-                    {interview.dateTime.toLocaleTimeString('en-US', { 
-                      hour: 'numeric', 
+                    {interview.dateTime.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
                       minute: '2-digit',
-                      hour12: true 
+                      hour12: true
                     })}
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                    {interview.dateTime.toLocaleDateString('en-US', { 
+                    {interview.dateTime.toLocaleDateString('en-US', {
                       weekday: 'short',
-                      month: 'short', 
-                      day: 'numeric' 
+                      month: 'short',
+                      day: 'numeric'
                     })}
                   </div>
                 </div>
@@ -1116,7 +1119,7 @@ const InterviewerProfilePage = () => {
           initialData={editFormData}
           onSave={handleSaveEdit}
           isSaving={isSaving}
-          imagePreview={imagePreview || ''}  
+          imagePreview={imagePreview || ''}
           onImageChange={handleImageChange}
         />
 
@@ -1125,7 +1128,7 @@ const InterviewerProfilePage = () => {
           {/* Calendar Card */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 transition-all hover:shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-transparent">
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-white">
                 Select Date
               </h2>
             </div>
@@ -1142,7 +1145,7 @@ const InterviewerProfilePage = () => {
           {/* Timeslots Card */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 transition-all hover:shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-transparent">
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-white">
                 Available Time Slots
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -1183,9 +1186,9 @@ const InterviewerProfilePage = () => {
             ) : (
               <>
                 <span>Save Availability</span>
-                <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" 
+                <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform"
                   fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M13 7l5 5m0 0l-5 5m5-5H6" />
                 </svg>
               </>

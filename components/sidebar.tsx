@@ -54,7 +54,8 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
       { type: 'item', icon: FiUser, label: 'Interviewers', href: '/admin/interviewers' },
       { type: 'divider' },
       { type: 'item', icon: FiUsers, label: 'Recruiters' },
-      { type: 'item', icon: FiBriefcase, label: 'Clients' },
+      { type: 'item', icon: FiBriefcase, label: 'Active Clients',href: '/admin/clients' },
+      { type: 'item', icon: FiBriefcase, label: 'Active Vendors',href: '/admin/vendors' },
       { type: 'item', icon: FiFileText, label: 'Jobs' },
     ];
 
