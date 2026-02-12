@@ -1,7 +1,7 @@
 'use client';
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   FiHome,
   FiUsers,
@@ -37,30 +37,58 @@ type MenuItem =
 
 const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
   const router = useRouter();
+  const pathname = usePathname();
   const [active, setActive] = useState<string>('Dashboard');
+
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
 
-  // Sample role and menu for UI preview
-  const userRole = 'SuperAdmin';
+  const [userRole, setUserRole] = useState<string>('Guest');
+
+  React.useEffect(() => {
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(';').shift();
+    };
+
+    const userDataCookie = getCookie('userData');
+    if (userDataCookie) {
+      try {
+        const userData = JSON.parse(decodeURIComponent(userDataCookie));
+        setUserRole(userData.role || 'Guest');
+      } catch (error) {
+        console.error('Error parsing userData cookie in Sidebar:', error);
+      }
+    }
+  }, []);
 
   const menuItems = useMemo<MenuItem[]>(() => {
     const base: MenuItem[] = [
       { type: 'item', icon: FiHome, label: 'Dashboard', href: '/admin' },
-      ...(userRole === 'SuperAdmin'? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const]: []),
-      ...(userRole === 'SuperAdmin'? [{ type: 'item', icon: FiUser, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const]: []),
-      ...(userRole !== 'SuperAdmin'? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const]: []),
+      ...(userRole === 'SuperAdmin' ? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const] : []),
+      ...(['SuperAdmin', 'Recruiter Admin', 'Lead Recruiter'].includes(userRole) ? [{ type: 'item', icon: FiUser, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const] : []),
+      ...(userRole !== 'SuperAdmin' ? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const] : []),
       { type: 'item', icon: FiUser, label: 'Interviewers', href: '/admin/interviewers' },
       { type: 'divider' },
-      { type: 'item', icon: FiUsers, label: 'Recruiters' },
-      { type: 'item', icon: FiBriefcase, label: 'Active Clients',href: '/admin/clients' },
-      { type: 'item', icon: FiBriefcase, label: 'Active Vendors',href: '/admin/vendors' },
-      { type: 'item', icon: FiFileText, label: 'Jobs' },
+      ...(userRole !== 'Recruiter' ? [{ type: 'item', icon: FiUsers, label: 'Recruiters', href: '/admin/recruiters' } as const] : []),
+      { type: 'item', icon: FiBriefcase, label: 'Active Clients', href: '/admin/clients' },
+      { type: 'item', icon: FiBriefcase, label: 'Active Vendors', href: '/admin/vendors' },
+      { type: 'item', icon: FiFileText, label: 'Jobs', href: '/admin/jobs' },
+      {type:'item',icon:FiUser,label:'Applied Candidates',href:'/admin/allcandidates'}
     ];
 
     return base;
   }, [userRole]);
+
+  React.useEffect(() => {
+    // Set active item based on current path
+    const currentItem = menuItems.find(item => item.type === 'item' && item.href === pathname);
+    if (currentItem && currentItem.type === 'item') {
+      setActive(currentItem.label);
+    }
+  }, [pathname, menuItems]);
 
   return (
     <>
@@ -111,7 +139,6 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
                     key={`${item.label}-${idx}`}
                     type="button"
                     onClick={() => {
-                      setActive(item.label);
                       if (item.href) {
                         router.push(item.href);
                       }
@@ -155,7 +182,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
 
       {showAddUserModal ? (
         <AnimatePresence>
-          <NewUser onClose={ () => setShowAddUserModal(false)} />
+          <NewUser onClose={() => setShowAddUserModal(false)} />
         </AnimatePresence>
       ) : null}
 

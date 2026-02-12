@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import Snowfall from "../components/Snowfall";
@@ -42,6 +41,38 @@ export default function Home() {
     try {
       const { user } = await loginWithEmailPasswordStrict(email, password);
       console.log("Logged in provisioned user:", user);
+
+      // Map numeric role to string
+      const roleMap: Record<number, string> = {
+        0: 'SuperAdmin',
+        1: 'Recruiter Admin',
+        2: 'Lead Recruiter',
+        3: 'Recruiter'
+      };
+
+      const mappedRole = typeof user.role === 'number' ? roleMap[user.role] : user.role;
+
+      // Prepare company data
+      let company = null;
+      if (user.company_id && typeof user.company_id === 'object') {
+        company = {
+          id: user.company_id._id,
+          name: user.company_id.name
+        };
+      } else if (user.company_id) {
+        company = { id: user.company_id, name: 'My Company' };
+      }
+
+      // Set userData cookie
+      const userData = {
+        name: user.username || user.display_name || user.email?.split('@')[0],
+        email: user.email,
+        role: mappedRole,
+        company: company
+      };
+
+      const cookieValue = JSON.stringify(userData);
+      document.cookie = `userData=${encodeURIComponent(cookieValue)}; path=/; max-age=86400`; // 1 day
 
       router.push("/admin");
     } catch (err: any) {

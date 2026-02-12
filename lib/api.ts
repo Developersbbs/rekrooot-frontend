@@ -21,10 +21,18 @@ export async function apiFetch<T>(
 
   const { token, headers, ...rest } = options;
 
+  const defaultHeaders: HeadersInit = {};
+  if (token) {
+    defaultHeaders["Authorization"] = `Bearer ${token}`;
+  }
+  if (rest.body && typeof rest.body === 'string') {
+    defaultHeaders["Content-Type"] = "application/json";
+  }
+
   const res = await fetch(`${baseUrl}${path}`, {
     ...rest,
     headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...defaultHeaders,
       ...(headers || {}),
     },
   });

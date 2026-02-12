@@ -61,34 +61,24 @@ function DashboardPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadStats() {
+    async function loadStats(user: any) {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       try {
-        setLoading(true);
-        const token = await auth.currentUser?.getIdToken();
-        if (!token) return;
-
-        // Get selected company from cookie (same as header)
-        const getCookie = (name: string) => {
-          const value = `; ${document.cookie}`;
-          const parts = value.split(`; ${name}=`);
-          if (parts.length === 2) return parts.pop()?.split(';').shift();
-        };
-        const selectedCompanyCookie = getCookie('selectedCompany');
-        let companyId = '';
-        if (selectedCompanyCookie) {
+        const token = await user.getIdToken();
+        const savedCompany = localStorage.getItem('selectedCompany');
+        let companyId = 'all';
+        if (savedCompany) {
           try {
-            const company = JSON.parse(decodeURIComponent(selectedCompanyCookie));
-            if (company.id && company.id !== 'all') {
-              companyId = company.id;
-            }
+            const company = JSON.parse(savedCompany);
+            companyId = company.id || 'all';
           } catch (e) {
-            console.error('Error parsing selectedCompany cookie:', e);
+            console.error("Failed to parse saved company", e);
           }
-        }
-
-        let url = "/dashboard/stats";
-        if (companyId) {
-          url += `?company_id=${companyId}`;
         }
 
         const res = await apiFetch<{
@@ -96,7 +86,7 @@ function DashboardPage() {
           monthlyTrends: MonthlyTrend[];
           candidateStatusData: CandidateStatusDatum[];
           recentInterviews: InterviewRow[];
-        }>(url, { token });
+        }>(`/dashboard/stats${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token });
 
         if (cancelled) return;
 
@@ -112,27 +102,24 @@ function DashboardPage() {
     }
 
     const handleCompanyChange = () => {
-      void loadStats();
+      // Need a reference to user here, but this is a broad listener.
+      // Re-running the auth listener logic is easier.
+      if (auth.currentUser) {
+        void loadStats(auth.currentUser);
+      }
     };
 
     window.addEventListener('companyChanged', handleCompanyChange);
 
-    if (auth.currentUser) {
-      void loadStats();
-    } else {
-      const unsubscribe = auth.onAuthStateChanged((user) => {
-        if (user) void loadStats();
-        else setLoading(false);
-      });
-      return () => {
-        cancelled = true;
-        unsubscribe();
-        window.removeEventListener('companyChanged', handleCompanyChange);
-      };
-    }
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (!cancelled) {
+        loadStats(user);
+      }
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe();
       window.removeEventListener('companyChanged', handleCompanyChange);
     };
   }, []);
@@ -182,11 +169,11 @@ function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-8">
         {[
           { title: 'Total Jobs', value: stats.totalJobs, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          {title:"Total Clients", value:stats.totalClients, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'},
-          {title:"Total Vendors", value:stats.totalVendors, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'},
+          { title: "Total Clients", value: stats.totalClients, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
+          { title: "Total Vendors", value: stats.totalVendors, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
           { title: 'Applied Candidates', value: stats.appliedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          {title:'Selected Candidates',value:stats.selectedCandidates,bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'},
-          {title:'Rejected Candidates',value:stats.rejectedCandidates,bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300'}
+          { title: 'Selected Candidates', value: stats.selectedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
+          { title: 'Rejected Candidates', value: stats.rejectedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' }
         ].map((stat, index) => (
           <motion.div
             key={stat.title}

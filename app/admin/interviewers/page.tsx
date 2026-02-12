@@ -137,8 +137,58 @@ const InterviewersPage = () => {
 
   useEffect(() => {
     setIsClient(true);
-    void fetchInterviewers();
-  }, [fetchInterviewers]);
+    let cancelled = false;
+
+    const performFetch = async (user: any) => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      setError(null);
+      setIsLoading(true);
+
+      try {
+        const token = await user.getIdToken();
+
+        let url = "/interviewers";
+        if (selectedCompany?.id && selectedCompany.id !== "all") {
+          url += `?company_id=${selectedCompany.id}`;
+        }
+
+        const res = await apiFetch<{ interviewers: Interviewer[] }>(url, {
+          token,
+        });
+
+        if (!cancelled) {
+          setInterviewers(res.interviewers || []);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          if (err instanceof ApiError) {
+            setError(err.message);
+          } else if (err instanceof Error) {
+            setError(err.message);
+          } else {
+            setError("Failed to load interviewers");
+          }
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (!cancelled) {
+        performFetch(user);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [selectedCompany?.id]);
 
   const handleModalClose = () => {
     setShowModal(false)

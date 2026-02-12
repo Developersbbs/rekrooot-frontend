@@ -11,6 +11,8 @@ export type AppUser = {
   firebase_uid: string;
   role: RoleType;
   is_active: boolean;
+  company_id?: string | { _id: string; name: string };
+  display_name?: string;
   created_at?: string;
   updated_at?: string;
 };

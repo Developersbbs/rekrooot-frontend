@@ -1,6 +1,6 @@
 'use client'
-import React, { useState, useEffect, useCallback } from 'react'
-import { FiPlus, FiPhone, FiMail, FiUser, FiCalendar, FiEdit2, FiTrash2 } from 'react-icons/fi'
+import React, { useState, useEffect } from 'react'
+import { FiPlus, FiPhone, FiMail, FiUser, FiEdit2, FiTrash2 } from 'react-icons/fi'
 import toast, { Toaster } from 'react-hot-toast'
 import { apiFetch } from '@/lib/api'
 import { auth } from '@/lib/firebase'
@@ -29,48 +29,72 @@ const VendorPage = () => {
     const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
     const [isLoading, setIsLoading] = useState(false)
 
-    // Company selection effect
     useEffect(() => {
+        const savedCompany = localStorage.getItem('selectedCompany');
+        if (savedCompany) {
+            try {
+                setSelectedCompany(JSON.parse(savedCompany));
+            } catch (e) {
+                console.error('Error parsing saved company:', e);
+            }
+        }
+
         const handleCompanyChange = (event: any) => {
             setSelectedCompany(event.detail)
         }
-
 
         window.addEventListener('companyChanged', handleCompanyChange)
         return () => window.removeEventListener('companyChanged', handleCompanyChange)
     }, [])
 
-    const fetchVendors = useCallback(async () => {
-        try {
-            setIsLoading(true)
-            const token = await auth.currentUser?.getIdToken()
-            if (!token) return
-
-            let url = '/vendors'
-            if (selectedCompany?.id && selectedCompany.id !== 'all') {
-                url += `?company_id=${selectedCompany.id}`
-            }
-
-            const res = await apiFetch<{ vendors: Vendor[] }>(url, { token })
-            setVendors(res.vendors)
-        } catch (error) {
-            console.error('Error fetching vendors:', error)
-            toast.error('Failed to fetch vendors')
-        } finally {
-            setIsLoading(false)
-        }
-    }, [selectedCompany])
+    const companyIdForFetch = selectedCompany?.id || 'all';
 
     useEffect(() => {
-        if (auth.currentUser) {
-            fetchVendors()
-        } else {
-            const unsubscribe = auth.onAuthStateChanged((user) => {
-                if (user) fetchVendors()
-            })
-            return () => unsubscribe()
-        }
-    }, [selectedCompany, fetchVendors])
+        let cancelled = false;
+
+        const fetchData = async (user: any) => {
+            if (!user) {
+                setIsLoading(false);
+                return;
+            }
+
+            const shouldShowFullLoading = vendors.length === 0;
+            if (shouldShowFullLoading) {
+                setIsLoading(true);
+            }
+
+            try {
+                const token = await user.getIdToken();
+
+                let url = '/vendors'
+                if (companyIdForFetch !== 'all') {
+                    url += `?company_id=${companyIdForFetch}`
+                }
+
+                const res = await apiFetch<{ vendors: Vendor[] }>(url, { token });
+
+                if (!cancelled) {
+                    setVendors(res.vendors);
+                }
+            } catch (error) {
+                console.error('Error fetching vendors:', error);
+                if (!cancelled) toast.error('Failed to fetch vendors');
+            } finally {
+                if (!cancelled) setIsLoading(false);
+            }
+        };
+
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (!cancelled) {
+                fetchData(user);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+        };
+    }, [companyIdForFetch, vendors.length])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -156,8 +180,10 @@ const VendorPage = () => {
     }
 
     const handleAddVendor = () => {
-        if (!selectedCompany?.id || selectedCompany.id === 'all') {
-            toast.error('Please select a company before adding a vendor')
+        const isValidId = selectedCompany?.id && (selectedCompany.id !== 'all') && /^[0-9a-fA-F]{24}$/.test(selectedCompany.id);
+
+        if (!isValidId) {
+            toast.error('Please select a specific, valid company before adding a vendor')
             return
         }
 
@@ -176,7 +202,6 @@ const VendorPage = () => {
         <div className="p-6 min-h-screen">
             <Toaster position="top-right" />
 
-            {/* Header */}
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold text-primary-500 dark:text-primary-100">
                     Vendor Management
@@ -247,7 +272,6 @@ const VendorPage = () => {
                 </div>
             )}
 
-            {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 overflow-y-auto">
                     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => setIsModalOpen(false)} />

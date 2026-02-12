@@ -1,6 +1,3 @@
-// Client-side Firebase initialization
-// Uses NEXT_PUBLIC_ environment variables so secrets are not exposed in the bundle.
-
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -15,7 +12,6 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Avoid re-initializing during hot reloads
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const firebaseApp = app;

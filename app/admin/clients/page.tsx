@@ -58,21 +58,20 @@ const ClientsPage = () => {
 
     useEffect(() => {
         const loadInitialCompany = () => {
+            const savedCompany = localStorage.getItem('selectedCompany');
+            if (savedCompany) {
+                try {
+                    setSelectedCompany(JSON.parse(savedCompany));
+                } catch (e) {
+                    console.error('Error parsing selectedCompany from localStorage:', e);
+                }
+            }
+
             const getCookie = (name: string) => {
                 const value = `; ${document.cookie}`;
                 const parts = value.split(`; ${name}=`);
                 if (parts.length === 2) return parts.pop()?.split(';').shift();
             };
-            const selectedCompanyCookie = getCookie('selectedCompany');
-            if (selectedCompanyCookie) {
-                try {
-                    const company = JSON.parse(decodeURIComponent(selectedCompanyCookie));
-                    setSelectedCompany(company);
-                } catch (e) {
-                    console.error('Error parsing selectedCompany cookie:', e);
-                }
-            }
-
             const userDataCookie = getCookie('userData');
             if (userDataCookie) {
                 try {
@@ -96,16 +95,53 @@ const ClientsPage = () => {
         };
     }, []);
 
+    const companyIdForFetch = selectedCompany?.id || 'all';
+
     useEffect(() => {
-        if (auth.currentUser) {
-            fetchClients()
-        } else {
-            const unsubscribe = auth.onAuthStateChanged((user) => {
-                if (user) fetchClients()
-            })
-            return () => unsubscribe()
-        }
-    }, [selectedCompany])
+        let cancelled = false;
+
+        const fetchAll = async (user: any) => {
+            if (!user) {
+                setIsLoading(false);
+                return;
+            }
+
+            if (clients.length === 0) {
+                setIsLoading(true);
+            }
+
+            try {
+                const token = await user.getIdToken();
+
+                let url = '/clients'
+                if (selectedCompany?.id && selectedCompany.id !== 'all') {
+                    url += `?company_id=${selectedCompany.id}`
+                }
+
+                const res = await apiFetch<{ clients: Client[] }>(url, { token })
+
+                if (!cancelled) {
+                    setClients(res.clients)
+                }
+            } catch (error) {
+                console.error('Error fetching clients:', error)
+                if (!cancelled) toast.error('Failed to fetch clients')
+            } finally {
+                if (!cancelled) setIsLoading(false)
+            }
+        };
+
+        const unsubscribe = auth.onAuthStateChanged((user) => {
+            if (!cancelled) {
+                fetchAll(user);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+            unsubscribe();
+        };
+    }, [companyIdForFetch])
 
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -267,8 +303,10 @@ const ClientsPage = () => {
     }
 
     const handleAddClientClick = () => {
-        if (!selectedCompany?.id || selectedCompany.id === 'all') {
-            toast.error('Please select a company before adding a client')
+        const isValidId = selectedCompany?.id && (selectedCompany.id !== 'all') && /^[0-9a-fA-F]{24}$/.test(selectedCompany.id);
+
+        if (!isValidId) {
+            toast.error('Please select a specific, valid company before adding a client')
             return
         }
         setIsModalOpen(true)

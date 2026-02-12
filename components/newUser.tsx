@@ -49,10 +49,80 @@ export default function NewUser({ onClose }: NewUserProps) {
     const [errorMessage, setErrorMessage] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // UI preview values
-    const isSuperAdmin = true;
+    // Get user role and company from cookie
+    const [currentUserRole, setCurrentUserRole] = useState<string>('Guest');
+    const [currentUserCompanyId, setCurrentUserCompanyId] = useState<string>('');
+    const [currentUserId, setCurrentUserId] = useState<string>('');
+
+    const roleMap: Record<number | string, string> = {
+        0: 'SuperAdmin',
+        1: 'Recruiter Admin',
+        2: 'Lead Recruiter',
+        3: 'Recruiter'
+    };
+
+    useEffect(() => {
+        const getCookie = (name: string) => {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop()?.split(';').shift();
+        };
+
+        const userDataCookie = getCookie('userData');
+        if (userDataCookie) {
+            try {
+                const userData = JSON.parse(decodeURIComponent(userDataCookie));
+
+                // Normalize role
+                const rawRole = userData.role;
+                const normalizedRole = typeof rawRole === 'number' ? roleMap[rawRole] : rawRole;
+                setCurrentUserRole(normalizedRole || 'Guest');
+
+                // Extract company ID with better fallbacks
+                const rawCompany = userData.company || userData.company_id;
+                if (normalizedRole !== 'SuperAdmin' && rawCompany) {
+                    const companyId = typeof rawCompany === 'object'
+                        ? (rawCompany.id || rawCompany._id)
+                        : rawCompany;
+
+                    if (companyId) {
+                        setCurrentUserCompanyId(companyId);
+
+                        // For Lead Recruiters, auto-populate role and lead recruiter ID
+                        if (normalizedRole === 'Lead Recruiter') {
+                            setFormData(prev => ({
+                                ...prev,
+                                companyId,
+                                role: 'Recruiter',
+                                leadRecruiterId: userData._id || userData.id
+                            }));
+                            setCurrentUserId(userData._id || userData.id);
+                        } else {
+                            // Auto-populate company for others (Recruiter Admin etc)
+                            setFormData(prev => ({ ...prev, companyId }));
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error parsing userData cookie:', error);
+            }
+        }
+    }, []);
+
+    const isSuperAdmin = currentUserRole === 'SuperAdmin';
     const regions = useMemo(() => ['East', 'West', 'North', 'South'], []);
-    const roles = useMemo<FormState['role'][]>(() => ['Recruiter Admin', 'Lead Recruiter', 'Recruiter'], []);
+
+    // Filter roles based on current user's role
+    const roles = useMemo<FormState['role'][]>(() => {
+        const allRoles: FormState['role'][] = ['Recruiter Admin', 'Lead Recruiter', 'Recruiter'];
+
+        // Recruiter Admin cannot create other Recruiter Admins
+        if (currentUserRole === 'Recruiter Admin') {
+            return allRoles.filter(role => role !== 'Recruiter Admin');
+        }
+
+        return allRoles;
+    }, [currentUserRole]);
 
     const [companies, setCompanies] = useState<Company[]>([
 
@@ -144,7 +214,11 @@ export default function NewUser({ onClose }: NewUserProps) {
             }
 
             if (!formData.companyId) {
-                setErrorMessage('Please select a company.');
+                if (isSuperAdmin) {
+                    setErrorMessage('Please select a company.');
+                } else {
+                    setErrorMessage('Company information is missing. Please contact support.');
+                }
                 return;
             }
 
@@ -157,11 +231,15 @@ export default function NewUser({ onClose }: NewUserProps) {
                 email: string;
                 company_id: string;
                 team_id?: string | null;
+                lead_recruiter_id?: string | null;
+                region?: string | null;
                 role: FormState['role'];
             } = {
                 email: formData.email,
                 company_id: formData.companyId,
                 role: formData.role,
+                lead_recruiter_id: formData.leadRecruiterId || null,
+                region: formData.region || null,
             };
 
             const res = await apiFetch<{
@@ -308,48 +386,51 @@ export default function NewUser({ onClose }: NewUserProps) {
                             />
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                User Role
-                            </label>
-                            <select
-                                className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                value={formData.role}
-                                onChange={handleRoleChange}
-                                required
-                                disabled={isSubmitting || (isSuperAdmin && !formData.companyId)}
-                            >
-                                <option value="">Select a role</option>
-                                {roles.map((r) => (
-                                    <option key={r} value={r}>{r}</option>
-                                ))}
-                            </select>
+                        {currentUserRole !== 'Lead Recruiter' && (
+                            <div className="space-y-1.5">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    User Role
+                                </label>
+                                <select
+                                    className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    value={formData.role}
+                                    onChange={handleRoleChange}
+                                    required
+                                    disabled={isSubmitting || (isSuperAdmin && !formData.companyId)}
+                                >
+                                    <option value="">Select a role</option>
+                                    {roles.map((r) => (
+                                        <option key={r} value={r}>{r}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
-                        </div>
-
-                        {formData.role === 'Recruiter' && (
+                        {(formData.role === 'Recruiter' || currentUserRole === 'Lead Recruiter') && (
                             <>
-                                <div className="space-y-1.5">
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                        Lead Recruiter
-                                    </label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                                        value={formData.leadRecruiterId}
-                                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData((prev) => ({ ...prev, leadRecruiterId: e.target.value }))}
-                                        disabled={isSubmitting || !formData.companyId || isLoadingLeadRecruiters}
-                                    >
-                                        <option value="">
-                                            {isLoadingLeadRecruiters ? 'Loading...' : 'Select a lead recruiter'}
-                                        </option>
-                                        {leadRecruiters.map((lr: LeadRecruiter) => (
-                                            <option key={lr.id} value={lr.id}>{lr.display_name}</option>
-                                        ))}
-                                    </select>
-                                    {!formData.companyId ? (
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">Select a company first.</div>
-                                    ) : null}
-                                </div>
+                                {currentUserRole !== 'Lead Recruiter' && (
+                                    <div className="space-y-1.5">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            Lead Recruiter
+                                        </label>
+                                        <select
+                                            className="w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                                            value={formData.leadRecruiterId}
+                                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData((prev) => ({ ...prev, leadRecruiterId: e.target.value }))}
+                                            disabled={isSubmitting || !formData.companyId || isLoadingLeadRecruiters}
+                                        >
+                                            <option value="">
+                                                {isLoadingLeadRecruiters ? 'Loading...' : 'Select a lead recruiter'}
+                                            </option>
+                                            {leadRecruiters.map((lr: LeadRecruiter) => (
+                                                <option key={lr.id} value={lr.id}>{lr.display_name}</option>
+                                            ))}
+                                        </select>
+                                        {!formData.companyId ? (
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">Select a company first.</div>
+                                        ) : null}
+                                    </div>
+                                )}
 
                                 <motion.div
                                     initial={{ height: 0, opacity: 0 }}

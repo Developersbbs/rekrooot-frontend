@@ -117,13 +117,21 @@ export default function CreateAccount() {
         </Button>
       </div>
 
-      <Card className="relative z-10 w-full max-w-md bg-background/90 backdrop-blur border border-border shadow-xl">
-        <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto mb-1 h-12 w-12 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-xl font-bold">R</span>
+      <Card className="relative z-10 w-full max-w-md bg-background/95 backdrop-blur-md border border-border shadow-2xl overflow-hidden">
+        <CardHeader className="space-y-4 text-center pt-8">
+          <div className="mx-auto relative w-24 h-12 flex items-center justify-center">
+            <Image
+              src="/assets/logo/logo.png"
+              alt="Rekrooot Logo"
+              fill
+              className="object-contain"
+              priority
+            />
           </div>
-          <CardTitle className="text-2xl font-semibold">Create account</CardTitle>
-          <CardDescription>Fill in your details to get started.</CardDescription>
+          <div className="space-y-1">
+            <CardTitle className="text-2xl font-bold tracking-tight">Create account</CardTitle>
+            <CardDescription className="text-muted-foreground">Fill in your details to join the recruitment team.</CardDescription>
+          </div>
         </CardHeader>
 
         <CardContent>
@@ -154,12 +162,9 @@ export default function CreateAccount() {
                 let createdFirebaseUser: typeof auth.currentUser | null = null;
 
                 try {
-                  // Ensure we are not still signed in as another user (e.g. SUPER_ADMIN)
-                  // which can cause /invitations/accept to be called with the wrong uid.
                   try {
                     await signOut(auth);
                   } catch {
-                    // ignore
                   }
 
                   const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
@@ -291,20 +296,57 @@ export default function CreateAccount() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={!canSubmit}>
-              {isSubmitting ? "Creating..." : "Create account"}
-            </Button>
+            <div className="space-y-4 pt-2">
+              <Button
+                type="submit"
+                className="w-full text-white bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 h-11 disabled:opacity-50 disabled:bg-primary"
+                disabled={!canSubmit}
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Creating account...</span>
+                  </div>
+                ) : (
+                  "Create account"
+                )}
+              </Button>
+
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => router.push("/login")}
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  Already have an account? Sign in
+                </button>
+              </div>
+            </div>
 
             {error ? (
-              <div className="text-sm text-destructive">{error}</div>
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive text-center">
+                {error}
+              </div>
+            ) : isLoadingInvite ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground py-2">
+                <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                Validating invitation...
+              </div>
             ) : invitation ? (
-              <div className="text-xs text-muted-foreground">
-                Invited to {invitation.company_name || "your company"}
+              <div className="text-xs text-muted-foreground text-center bg-muted/50 py-2 rounded-md">
+                You are invited to join <span className="font-semibold text-foreground">{invitation.company_name || "the company"}</span>
               </div>
             ) : null}
           </form>
         </CardContent>
       </Card>
+
+      {/* Footer Branding */}
+      <div className="absolute bottom-8 left-0 right-0 text-center z-10">
+        <p className="text-xs text-white/50 font-medium tracking-widest uppercase">
+          Powered by Rekrooot Recruitment Platform
+        </p>
+      </div>
     </div>
   );
 }

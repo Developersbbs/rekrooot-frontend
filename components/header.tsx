@@ -33,6 +33,13 @@ type HeaderUser = {
   metadata?: unknown;
 };
 
+const roleMap: Record<number, string> = {
+  0: 'SuperAdmin',
+  1: 'Recruiter Admin',
+  2: 'Lead Recruiter',
+  3: 'Recruiter'
+};
+
 const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
   const router = useRouter();
   const [user, setUser] = useState<HeaderUser | null>(null);
@@ -44,73 +51,159 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  const role = 'Super Admin';
+  // Derived role from user state
+  const role = user?.role || 'Guest';
 
-  // Theme is controlled by AdminLayout; Header only reflects the current state via props.
-
-  // Add useEffect to listen to auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        // Get userData from cookie
-        const getCookie = (name: string) => {
-          const value = `; ${document.cookie}`;
-          const parts = value.split(`; ${name}=`);
-          if (parts.length === 2) return parts.pop()?.split(';').shift();
-        };
+        try {
+          // 1. Try to get userData from cookie for fast load
+          const getCookie = (name: string) => {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop()?.split(';').shift();
+          };
 
-        const userDataCookie = getCookie('userData');
-        let userData = {
-          name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
-          email: currentUser.email,
-          avatar: currentUser.photoURL,
-          role: 'User',
-          company: null
-        };
+          let userData: any = null;
+          const userDataCookie = getCookie('userData');
 
-        if (userDataCookie) {
-          try {
-            const cookieData = JSON.parse(decodeURIComponent(userDataCookie));
-            userData = {
-              ...userData,
-              name: cookieData.name || userData.name,
-              role: cookieData.role || 'User',
-              company: cookieData.company || null,
+          if (userDataCookie) {
+            try {
+              userData = JSON.parse(decodeURIComponent(userDataCookie));
+
+              if (!userData.id && !userData._id && !userData.firebase_uid) {
+                userData = null;
+              } else if (userData.company && typeof userData.company === 'object') {
+                userData.company = {
+                  id: userData.company.id || '',
+                  name: userData.company.name || 'Unknown Company'
+                };
+              }
+            } catch (e) {
+              console.warn("Invalid cookie data", e);
+              userData = null;
+            }
+          }
+
+          // 2. If no cookie or invalid, fetch from API
+          if (!userData) {
+            const token = await currentUser.getIdToken();
+            const res = await apiFetch<{ user: any }>('/auth/me', { token });
+            if (res && res.user) {
+              userData = res.user;
+
+              if (typeof userData.role === 'number') {
+                userData.role = roleMap[userData.role] || 'User';
+              }
+
+              if (userData.company_id && typeof userData.company_id === 'object') {
+                userData.company = {
+                  id: userData.company_id._id,
+                  name: userData.company_id.name
+                };
+              } else if (userData.company_id) {
+                // Fallback if not populated (though we just updated backend to populate)
+                userData.company = { id: userData.company_id, name: 'My Company' };
+              }
+
+              userData.name = userData.username || userData.display_name || userData.email?.split('@')[0];
+            }
+          }
+
+          if (userData) {
+            const finalUserData: HeaderUser = {
+              name: userData.name || userData.username || 'User',
+              email: userData.email,
+              avatar: currentUser.photoURL || null,
+              role: userData.role,
+              company: userData.company || null,
+              metadata: currentUser.metadata,
+              createdAt: currentUser.metadata.creationTime ? new Date(currentUser.metadata.creationTime) : null,
             };
-          } catch (error) {
-            console.error('Error parsing userData cookie:', error);
-          }
-        }
 
-        // Store the Firebase user with metadata
-        const finalUserData: HeaderUser = {
-          ...userData,
-          metadata: currentUser.metadata,
-          createdAt: currentUser.metadata?.creationTime ? new Date(currentUser.metadata.creationTime) : null,
-        };
+            setUser(finalUserData);
 
-        setUser(finalUserData);
-        
-        // Set company for non-SuperAdmin users
-        if (userData.role !== 'SuperAdmin' && userData.company && typeof userData.company === 'object') {
-          const company = userData.company as Partial<Company>;
-          if (company.id && company.name) {
-            setSelectedCompany({ id: company.id, name: company.name });
+            // Set selected company if applicable
+            if (finalUserData.role !== 'SuperAdmin' && finalUserData.company) {
+              setSelectedCompany(finalUserData.company);
+            }
+
+            // Update cookie if we fetched fresh data
+            if (!userDataCookie) {
+              const cookieVal = JSON.stringify({
+                _id: userData._id,
+                id: userData._id,
+                firebase_uid: userData.firebase_uid || currentUser.uid,
+                name: finalUserData.name,
+                email: finalUserData.email,
+                role: finalUserData.role,
+                company: finalUserData.company,
+                contact: userData.contact || userData.phone_number
+              });
+              document.cookie = `userData=${encodeURIComponent(cookieVal)}; path=/; max-age=86400`;
+            }
           }
+        } catch (error) {
+          console.error("Error fetching user details", error);
+          // Fallback to basic firebase info
+          setUser({
+            name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+            email: currentUser.email,
+            avatar: currentUser.photoURL || null,
+            role: 'User',
+            company: null
+          });
         }
       } else {
         setUser(null);
+        // Clear cookie
+        document.cookie = 'userData=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
       }
     });
 
     return () => unsubscribe();
   }, []);
 
+  // Sync selected company from localStorage on mount
+  useEffect(() => {
+    if (role === 'SuperAdmin') {
+      const savedCompany = localStorage.getItem('selectedCompany');
+      if (savedCompany) {
+        try {
+          const company = JSON.parse(savedCompany);
+
+          // Validate company ID format
+          const isValidId = company.id === 'all' || /^[0-9a-fA-F]{24}$/.test(company.id);
+
+          if (isValidId) {
+            setSelectedCompany(company);
+            // Notify other components after a short delay to ensure they are mounted
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('companyChanged', { detail: company }));
+            }, 100);
+          } else {
+            // Invalid ID found, reset to All
+            console.warn('Invalid company ID in localStorage, resetting to All');
+            const defaultCompany = { id: 'all', name: 'All' };
+            setSelectedCompany(defaultCompany);
+            localStorage.setItem('selectedCompany', JSON.stringify(defaultCompany));
+            // Also clear the cookie
+            document.cookie = 'selectedCompany=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
+          }
+        } catch (e) {
+          console.error("Failed to parse saved company", e);
+        }
+      }
+    }
+  }, [role]);
+
   useEffect(() => {
     let cancelled = false;
 
     async function loadCompanies() {
-      if (role !== 'Super Admin') return;
+      // Only Super Admin can load all companies
+      if (role !== 'SuperAdmin') return;
       if (!auth.currentUser) return;
 
       const token = await auth.currentUser.getIdToken();
@@ -131,35 +224,19 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
       }
     }
 
-    // Initial load (may run before auth is ready)
-    void loadCompanies();
-
-    // Re-try once auth state is available
-    if (role === 'Super Admin') {
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        if (currentUser) {
-          void loadCompanies();
-        }
-      });
-
-      const handleCompaniesUpdated = () => {
-        void loadCompanies();
-      };
+    if (role === 'SuperAdmin') {
+      void loadCompanies();
+      const handleCompaniesUpdated = () => void loadCompanies();
       window.addEventListener('companiesUpdated', handleCompaniesUpdated);
-
       return () => {
         cancelled = true;
-        unsubscribe();
         window.removeEventListener('companiesUpdated', handleCompaniesUpdated);
       };
     }
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [role]);
 
-  // Add useEffect for click outside handler
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node | null;
@@ -175,7 +252,6 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
   }, []);
 
 
-  // Add this useEffect to fetch user data from cookie
   const handleProfileClick = () => {
     setShowProfile(false);
     setShowProfileModal(true);
@@ -191,10 +267,6 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
     }
   };
 
-
-
-
-
   const getGreeting = () => {
     const now = new Date();
     const hours = now.getHours();
@@ -208,7 +280,6 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
     }
   };
 
-  // Add this new useEffect to update time
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
@@ -217,14 +288,13 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Update the formatTime helper function for better formatting
   const formatTime = (date: Date) => {
     const hours = date.getHours();
     const minutes = date.getMinutes();
     const seconds = date.getSeconds();
     const ampm = hours >= 12 ? 'PM' : 'AM';
     const formattedHours = hours % 12 || 12;
-    
+
     return {
       main: `${formattedHours}:${String(minutes).padStart(2, '0')}`,
       seconds: String(seconds).padStart(2, '0'),
@@ -236,90 +306,72 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
     <header className={`${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-100'} 
       border-b fixed w-full top-0 z-30 shadow-sm`}>
       <div className="flex items-center justify-between px-6 py-4">
-        {/* Left side */}
         <div className="flex items-center flex-1">
           <button
             onClick={toggleSidebar}
-            className={`p-2.5 rounded-xl transition-colors duration-200 ${
-              darkMode 
-                ? 'hover:bg-gray-800 text-gray-300 hover:text-white' 
-                : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'
-            }`}
+            className={`p-2.5 rounded-xl transition-colors duration-200 ${darkMode
+              ? 'hover:bg-gray-800 text-gray-300 hover:text-white'
+              : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'
+              }`}
           >
             <FiMenu className="h-5 w-5" />
           </button>
-          
+
           <div className="ml-6 flex-1">
             <div className="flex items-center space-x-8">
-              {/* Enhanced Greeting Section */}
               <div className="flex flex-col">
                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
                   {getGreeting()}
                 </span>
-                <span className={`text-sm font-medium ${
-                  darkMode ? 'text-gray-400' : 'text-gray-600'
-                }`}>
-                  Welcome back, Username
+                <span className={`text-sm font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'
+                  }`}>
+                  Welcome back, {user?.name || 'User'}
                 </span>
               </div>
 
-              {/* Compact DateTime and Info Section */}
               <div className="flex items-center space-x-3">
-                {/* Date & Time Group */}
-                <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg ${
-                  darkMode 
-                    ? 'bg-gray-800/50 text-gray-200' 
-                    : 'bg-gray-50/80 text-gray-700'
-                }`}>
-                  {/* Date */}
+                <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg ${darkMode
+                  ? 'bg-gray-800/50 text-gray-200'
+                  : 'bg-gray-50/80 text-gray-700'
+                  }`}>
                   <div className="flex items-center">
-                    <FiCalendar className={`h-3.5 w-3.5 ${
-                      darkMode ? 'text-blue-400' : 'text-blue-500'
-                    }`} />
+                    <FiCalendar className={`h-3.5 w-3.5 ${darkMode ? 'text-blue-400' : 'text-blue-500'
+                      }`} />
                     <span className="ml-1.5 text-sm font-medium">
-                      {new Date().toLocaleDateString('en-US', { 
+                      {new Date().toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric'
                       })}
                     </span>
                   </div>
-                  
-                  {/* Separator */}
+
                   <div className={`h-4 w-px ${darkMode ? 'bg-gray-700' : 'bg-gray-300'}`} />
-                  
-                  {/* Time */}
+
                   <div className="flex items-center">
-                    <FiClock className={`h-3.5 w-3.5 ${
-                      darkMode ? 'text-purple-400' : 'text-purple-500'
-                    }`} />
+                    <FiClock className={`h-3.5 w-3.5 ${darkMode ? 'text-purple-400' : 'text-purple-500'
+                      }`} />
                     <div className="ml-2 flex items-baseline">
-                      {/* Hours, Minutes, and Seconds */}
                       <div className="flex items-baseline text-base font-semibold tabular-nums">
                         <span>{formatTime(currentTime).main}</span>
                         <span className={
                           darkMode ? 'text-purple-400/90' : 'text-purple-500/90'
                         }>:{formatTime(currentTime).seconds}</span>
                       </div>
-                      
-                      {/* AM/PM */}
-                      <span className={`ml-1 text-[10px] font-medium uppercase tracking-wide ${
-                        darkMode ? 'text-gray-400' : 'text-gray-500'
-                      }`}>
+
+                      <span className={`ml-1 text-[10px] font-medium uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'
+                        }`}>
                         {formatTime(currentTime).ampm}
                       </span>
                     </div>
                   </div>
 
-                  {/* Separator */}
                   <div className={`h-4 w-px ${darkMode ? 'bg-gray-700' : 'bg-gray-300'}`} />
-                  
-                  {/* User Role */}
+
                   <div className="flex items-center">
-                    <FiUser className={`h-3.5 w-3.5 ${
-                      darkMode ? 'text-green-400' : 'text-green-500'
-                    }`} />
+                    <FiUser className={`h-3.5 w-3.5 ${darkMode ? 'text-green-400' : 'text-green-500'
+                      }`} />
                     <span className="ml-1.5 text-sm font-medium">
-                      Super Admin
+                      {user?.role || 'Guest'}
                     </span>
                   </div>
                 </div>
@@ -328,50 +380,48 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
           </div>
         </div>
 
-        {/* Center - Company Selector (Only visible for SuperAdmin) */}
-        {role === 'Super Admin' && (
+        {role === 'SuperAdmin' && (
           <div className="relative mx-4">
             <button
               onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
-              className={`flex items-center justify-between px-4 py-2.5 rounded-lg border transition-colors duration-200 ${
-                darkMode
-                  ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-750'
-                  : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-gray-100'
-              } focus:outline-none focus:ring-2 focus:ring-blue-500/40 min-w-[200px]`}
+              className={`flex items-center justify-between px-4 py-2.5 rounded-lg border transition-colors duration-200 ${darkMode
+                ? 'bg-gray-800 border-gray-700 text-white hover:bg-gray-750'
+                : 'bg-gray-50 border-gray-200 text-gray-900 hover:bg-gray-100'
+                } focus:outline-none focus:ring-2 focus:ring-blue-500/40 min-w-[200px]`}
             >
               <span className="font-medium">{selectedCompany.name}</span>
-              <FiChevronDown className={`ml-2 transform transition-transform duration-200 ${
-                showCompanyDropdown ? 'rotate-180' : ''
-              }`} />
+              <FiChevronDown className={`ml-2 transform transition-transform duration-200 ${showCompanyDropdown ? 'rotate-180' : ''
+                }`} />
             </button>
 
             {showCompanyDropdown && (
-              <div className={`absolute mt-2 w-full rounded-lg shadow-lg border ${
-                darkMode
-                  ? 'bg-gray-800 border-gray-700'
-                  : 'bg-white border-gray-200'
-              }`}>
+              <div className={`absolute mt-2 w-full rounded-lg shadow-lg border ${darkMode
+                ? 'bg-gray-800 border-gray-700'
+                : 'bg-white border-gray-200'
+                }`}>
                 {companies.map((company) => (
                   <button
                     key={company.id}
                     onClick={() => {
                       setSelectedCompany(company);
                       setShowCompanyDropdown(false);
-                      
+
+                      // Persist selection
+                      localStorage.setItem('selectedCompany', JSON.stringify(company));
+
                       // Dispatch custom event for company change
-                      const event = new CustomEvent('companyChanged', { 
-                        detail: company 
+                      const event = new CustomEvent('companyChanged', {
+                        detail: company
                       });
                       window.dispatchEvent(event);
                     }}
-                    className={`w-full text-left px-4 py-3 first:rounded-t-lg last:rounded-b-lg transition-colors duration-200 ${
-                      darkMode
-                        ? 'hover:bg-gray-700 text-gray-200'
-                        : 'hover:bg-gray-50 text-gray-700'
-                    } ${selectedCompany.id === company.id ? 
-                        (darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900') 
+                    className={`w-full text-left px-4 py-3 first:rounded-t-lg last:rounded-b-lg transition-colors duration-200 ${darkMode
+                      ? 'hover:bg-gray-700 text-gray-200'
+                      : 'hover:bg-gray-50 text-gray-700'
+                      } ${selectedCompany.id === company.id ?
+                        (darkMode ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-900')
                         : ''
-                    }`}
+                      }`}
                   >
                     <span className="font-medium">{company.name}</span>
                   </button>
@@ -383,55 +433,48 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
 
         {/* Right side */}
         <div className="flex items-center space-x-2">
-          <button 
+          <button
             onClick={() => toggleDarkMode()}
-            className={`p-2.5 rounded-xl transition-colors duration-200 ${
-              darkMode 
-                ? 'hover:bg-gray-800 text-gray-300 hover:text-white' 
-                : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'
-            }`}
+            className={`p-2.5 rounded-xl transition-colors duration-200 ${darkMode
+              ? 'hover:bg-gray-800 text-gray-300 hover:text-white'
+              : 'hover:bg-gray-100 text-gray-600 hover:text-gray-900'
+              }`}
           >
             {darkMode ? <FiSun className="h-5 w-5" /> : <FiMoon className="h-5 w-5" />}
           </button>
-          
-          
+
+
           <div className="relative pl-2" ref={profileRef}>
             <button
               onClick={() => setShowProfile(!showProfile)}
-              className={`flex items-center space-x-3 p-2 rounded-xl transition-colors duration-200 ${
-                darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
-              }`}
+              className={`flex items-center space-x-3 p-2 rounded-xl transition-colors duration-200 ${darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'
+                }`}
             >
               <div className="h-9 w-9 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center ring-2 ring-white dark:ring-gray-900">
                 <span className='text-white text-sm font-semibold'>
-                    SA
+                  {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
                 </span>
               </div>
-              <span className={`hidden md:block font-medium ${
-                darkMode ? 'text-gray-200' : 'text-gray-700'
-              }`}>
-                Super Admin
+              <span className={`hidden md:block font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'
+                }`}>
+                {user?.name || 'User'}
               </span>
             </button>
-            
+
             {showProfile && (
-              <div className={`absolute right-0 mt-2 w-64 rounded-xl shadow-lg py-2 border ${
-                darkMode 
-                  ? 'bg-gray-900 border-gray-800' 
-                  : 'bg-white border-gray-100'
-              }`}>
-                <div className={`px-4 py-3 border-b ${
-                  darkMode ? 'border-gray-800' : 'border-gray-100'
+              <div className={`absolute right-0 mt-2 w-64 rounded-xl shadow-lg py-2 border ${darkMode
+                ? 'bg-gray-900 border-gray-800'
+                : 'bg-white border-gray-100'
                 }`}>
-                  <div className={`font-medium ${
-                    darkMode ? 'text-white' : 'text-gray-900'
+                <div className={`px-4 py-3 border-b ${darkMode ? 'border-gray-800' : 'border-gray-100'
                   }`}>
-                    Super Admin
+                  <div className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'
+                    }`}>
+                    {user?.name || 'User'}
                   </div>
-                  <div className={`text-sm ${
-                    darkMode ? 'text-gray-400' : 'text-gray-500'
-                  }`}>
-                    superadmin@rekrooot.com
+                  <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'
+                    }`}>
+                    {user?.email || 'No email provided'}
                   </div>
                 </div>
                 {/* Profile menu items */}
@@ -441,22 +484,20 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
                       key={item}
                       href="#"
                       onClick={handleProfileClick}
-                      className={`block px-4 py-2 text-sm transition-colors duration-200 ${
-                        darkMode 
-                          ? 'text-gray-300 hover:bg-gray-800' 
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
+                      className={`block px-4 py-2 text-sm transition-colors duration-200 ${darkMode
+                        ? 'text-gray-300 hover:bg-gray-800'
+                        : 'text-gray-700 hover:bg-gray-50'
+                        }`}
                     >
                       {item}
                     </a>
                   ))}
-                  <button 
+                  <button
                     onClick={handleLogout}
-                    className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 ${
-                      darkMode 
-                        ? 'text-red-400 hover:bg-gray-800' 
-                        : 'text-red-600 hover:bg-gray-50'
-                    }`}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200 ${darkMode
+                      ? 'text-red-400 hover:bg-gray-800'
+                      : 'text-red-600 hover:bg-gray-50'
+                      }`}
                   >
                     Logout
                   </button>
@@ -486,15 +527,15 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
               <div className="flex items-center space-x-4">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-r from-primary-500 to-primary-600 flex items-center justify-center">
                   <span className="text-2xl font-bold text-white">
-                    SA
+                    {user?.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
                   </span>
                 </div>
                 <div>
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    UserName
+                    {user?.name || 'User'}
                   </h4>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    demouser@gmial.com
+                    {user?.email || 'No email provided'}
                   </p>
                 </div>
               </div>
@@ -506,13 +547,13 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Account Type</p>
                     <p className="font-medium text-gray-900 dark:text-white">
-                      Super Admin
+                      {user?.role || 'Guest'}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Company</p>
                     <p className="font-medium text-gray-900 dark:text-white">
-                      Demo Company
+                      {user?.company?.name || 'No Company'}
                     </p>
                   </div>
                   <div>
@@ -530,7 +571,7 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
 
 
             </div>
-            
+
           </div>
         </div>
       )}
