@@ -12,6 +12,13 @@ import {
   FiFileText,
   FiX,
   FiUser,
+  FiTrash,
+  FiTrash2,
+  FiBarChart,
+  FiUserCheck,
+  FiClock,
+  FiCalendar,
+  FiUserPlus,
 } from 'react-icons/fi';
 import type { IconType } from 'react-icons';
 import CreateCompany from './createCompany';
@@ -68,15 +75,20 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
     const base: MenuItem[] = [
       { type: 'item', icon: FiHome, label: 'Dashboard', href: '/admin' },
       ...(userRole === 'SuperAdmin' ? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const] : []),
-      ...(['SuperAdmin', 'Recruiter Admin', 'Lead Recruiter'].includes(userRole) ? [{ type: 'item', icon: FiUser, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const] : []),
+      ...(['SuperAdmin', 'Recruiter Admin', 'Lead Recruiter'].includes(userRole) ? [{ type: 'item', icon: FiUserPlus, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const] : []),
       ...(userRole !== 'SuperAdmin' ? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const] : []),
       { type: 'item', icon: FiUser, label: 'Interviewers', href: '/admin/interviewers' },
       { type: 'divider' },
       ...(userRole !== 'Recruiter' ? [{ type: 'item', icon: FiUsers, label: 'Recruiters', href: '/admin/recruiters' } as const] : []),
       { type: 'item', icon: FiBriefcase, label: 'Active Clients', href: '/admin/clients' },
-      { type: 'item', icon: FiBriefcase, label: 'Active Vendors', href: '/admin/vendors' },
+      { type: 'item', icon: FiUsers, label: 'Active Vendors', href: '/admin/vendors' },
       { type: 'item', icon: FiFileText, label: 'Jobs', href: '/admin/jobs' },
-      {type:'item',icon:FiUser,label:'Applied Candidates',href:'/admin/allcandidates'}
+      { type: 'item', icon: FiUser, label: 'Applied Candidates', href: '/admin/allcandidates' },
+      { type: 'item', icon: FiCalendar, label: 'Scheduled Candidates', href: '/admin/scheduled' },
+      { type: 'item', icon: FiClock, label: 'Interview In Review', href: '/admin/interviewreview' },
+      { type: 'item', icon: FiUserCheck, label: 'Interviewed Candidates', href: '/admin/interviewedcandidates' },
+      { type: 'item', icon: FiTrash2, label: 'Trash Candidates', href: '/admin/trash' },
+      { type: 'item', icon: FiBarChart, label: 'Reports', href: '/admin/reports' },
     ];
 
     return base;
@@ -84,7 +96,13 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
 
   React.useEffect(() => {
     // Set active item based on current path
-    const currentItem = menuItems.find(item => item.type === 'item' && item.href === pathname);
+    const currentItem = menuItems.find(item => {
+      if (item.type !== 'item' || !item.href) return false;
+      if (item.href === pathname) return true;
+      if (item.href !== '/admin' && pathname.startsWith(item.href)) return true;
+      return false;
+    });
+
     if (currentItem && currentItem.type === 'item') {
       setActive(currentItem.label);
     }

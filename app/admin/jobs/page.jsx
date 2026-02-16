@@ -67,7 +67,8 @@ const JobsPage = () => {
       noShow: 0,
       cancelled: 0,
       technicalIssue: 0,
-      proxy: 0
+      proxy: 0,
+      onHold: 0
     }
   })
 
@@ -159,7 +160,7 @@ const JobsPage = () => {
           jobLocation: job.location,
           jobCategory: job.category,
           jobType: job.type,
-          requiredSkills: job.required_skills,
+          requiredSkills: job.technologies ? job.technologies.map(t => typeof t === 'object' ? t.name : t) : [],
           createdAt: job.createdAt ? new Date(job.createdAt) : new Date(),
           candidateCounts: job.candidate_counts ? {
             waiting: job.candidate_counts.waiting || 0,
@@ -170,6 +171,7 @@ const JobsPage = () => {
             cancelled: job.candidate_counts.cancelled || 0,
             technicalIssue: job.candidate_counts.technical_issue || 0,
             proxy: job.candidate_counts.proxy || 0,
+            onHold: job.candidate_counts.on_hold || 0,
             applied: job.candidate_counts.applied || 0
           } : {
             waiting: 0,
@@ -180,12 +182,13 @@ const JobsPage = () => {
             cancelled: 0,
             technicalIssue: 0,
             proxy: 0,
+            onHold: 0,
             applied: 0
           }
         }));
 
         setJobs(jobsWithCounts)
-        setClients(clientsRes.clients || [])
+        setClients((clientsRes.clients || []).map(c => ({ ...c, id: c._id })))
         setTechnologies(technologiesData)
       } catch (error) {
         console.error('Error fetching data:', error)
@@ -316,7 +319,7 @@ const JobsPage = () => {
           jobLocation: res.job.location,
           jobCategory: res.job.category,
           jobType: res.job.type,
-          requiredSkills: res.job.required_skills,
+          requiredSkills: res.job.technologies ? res.job.technologies.map(t => typeof t === 'object' ? t.name : t) : [],
           candidateCounts: res.job.candidate_counts || {
             waiting: 0,
             scheduled: 0,
@@ -325,7 +328,8 @@ const JobsPage = () => {
             noShow: 0,
             cancelled: 0,
             technicalIssue: 0,
-            proxy: 0
+            proxy: 0,
+            onHold: 0
           }
         }, ...prev])
 
@@ -387,7 +391,7 @@ const JobsPage = () => {
             jobLocation: res.job.location,
             jobCategory: res.job.category,
             jobType: res.job.type,
-            requiredSkills: res.job.required_skills,
+            requiredSkills: res.job.technologies ? res.job.technologies.map(t => typeof t === 'object' ? t.name : t) : [],
             candidateCounts: res.job.candidate_counts || job.candidateCounts
           } : job
         ))
@@ -491,11 +495,9 @@ const JobsPage = () => {
   const handleAddCandidate = (job) => {
     // Check if SuperAdmin has selected a company
     const userDataCookie = Cookies.get('userData');
-    const selectedCompanyCookie = Cookies.get('selectedCompany');
     const userData = userDataCookie ? JSON.parse(userDataCookie) : null;
-    const selectedCompany = selectedCompanyCookie ? JSON.parse(selectedCompanyCookie) : null;
 
-    if (userData?.role === 'SuperAdmin' && !selectedCompany) {
+    if (userData?.role === 'SuperAdmin' && (!selectedCompanyId || selectedCompanyId === 'all')) {
       toast.error('Please select a company before adding a candidate');
       return;
     }
@@ -530,7 +532,8 @@ const JobsPage = () => {
         noShow: 0,
         cancelled: 0,
         technicalIssue: 0,
-        proxy: 0
+        proxy: 0,
+        onHold: 0
       }
     });
     // Also reset the selected skills state
@@ -540,11 +543,9 @@ const JobsPage = () => {
   const handleApply = (job) => {
     // Check if SuperAdmin has selected a company
     const userDataCookie = Cookies.get('userData');
-    const selectedCompanyCookie = Cookies.get('selectedCompany');
     const userData = userDataCookie ? JSON.parse(userDataCookie) : null;
-    const selectedCompany = selectedCompanyCookie ? JSON.parse(selectedCompanyCookie) : null;
 
-    if (userData?.role === 'SuperAdmin' && !selectedCompany) {
+    if (userData?.role === 'SuperAdmin' && (!selectedCompanyId || selectedCompanyId === 'all')) {
       toast.error('Please select a company before adding a candidate');
       return;
     }
@@ -657,6 +658,7 @@ const JobsPage = () => {
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Cancelled</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Tech Issue</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Proxy</th>
+                  <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">On Hold</th>
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Created</th>
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Status</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Actions</th>
@@ -669,7 +671,7 @@ const JobsPage = () => {
                   const totalCandidates = job.candidateCounts ? Object.values(job.candidateCounts).reduce((sum, count) => sum + count, 0) : 0;
 
                   return (
-                    <tr key={job.id} className="group transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/80">
+                    <tr key={job.id || job._id || index} className="group transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-800/80">
                       <td className="sticky left-0 bg-inherit group-hover:bg-gray-50/80 dark:group-hover:bg-gray-800/80 px-4 py-4 text-sm font-medium text-gray-900 dark:text-gray-100">
                         {index + 1}
                       </td>
@@ -691,7 +693,7 @@ const JobsPage = () => {
                         </button>
                       </td>
                       {/* Candidate Status Columns */}
-                      {['total', 'waiting', 'scheduled', 'selected', 'rejected', 'noShow', 'cancelled', 'technicalIssue', 'proxy'].map((status) => (
+                      {['total', 'waiting', 'scheduled', 'selected', 'rejected', 'noShow', 'cancelled', 'technicalIssue', 'proxy', 'onHold'].map((status) => (
                         <td key={status} className="px-4 py-4 text-center">
                           <span className={`inline-flex items-center justify-center min-w-[32px] px-2.5 py-1 rounded-full text-xs font-medium
                             ${status === 'total' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200' :
@@ -703,9 +705,10 @@ const JobsPage = () => {
                                         status === 'cancelled' ? 'bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-200' :
                                           status === 'technicalIssue' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200' :
                                             status === 'proxy' ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200' :
-                                              'bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-200'}`}>
+                                              status === 'onHold' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200' :
+                                                'bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-200'}`}>
                             {status === 'total' ?
-                              (job.candidateCounts?.applied || 0) :
+                              totalCandidates :
                               job.candidateCounts?.[status] || 0}
                           </span>
                         </td>
@@ -1046,8 +1049,8 @@ const JobsPage = () => {
                       required
                     >
                       <option value="">Select a client</option>
-                      {clients.map(client => (
-                        <option key={client.id} value={client.id}>
+                      {clients.map((client, idx) => (
+                        <option key={client.id || client._id || idx} value={client.id || client._id}>
                           {client.clientName || client.name || 'Unnamed Client'}
                         </option>
                       ))}

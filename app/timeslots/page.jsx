@@ -1,13 +1,11 @@
 'use client'
 import React, { useState, useEffect, Suspense } from 'react'
 import { format, addDays, startOfToday } from 'date-fns'
-import { collection, getDocs, doc, getDoc, updateDoc, query, where, deleteField } from 'firebase/firestore'
-import { db } from '@/config/firebase.config'
 import { MdWarning } from 'react-icons/md'
 import { useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { ClipLoader } from 'react-spinners'
-import { Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button } from '@mui/material'
+import { Dialog } from '@mui/material'
 
 const convertTo24Hour = (time) => {
   const [timeStr, period] = time.split(' ');
@@ -19,7 +17,7 @@ const convertTo24Hour = (time) => {
     hours = 0;
   }
 
-  return hours * 60 + minutes; // Convert to minutes for easier comparison
+  return hours * 60 + minutes;
 };
 
 const TimeslotsPage = () => {
@@ -30,7 +28,8 @@ const TimeslotsPage = () => {
   );
 }
 
-const fallbackPresenterId = process.env.NEXT_PUBLIC_ZOHO_DEFAULT_PRESENTER_ID || '60058686791';
+const fallbackPresenterId = process.env.NEXT_PUBLIC_ZOHO_DEFAULT_PRESENTER_ID;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 const TimeslotsPageContent = () => {
   const searchParams = useSearchParams()
@@ -40,7 +39,6 @@ const TimeslotsPageContent = () => {
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [interviewers, setInterviewers] = useState([])
   const [loading, setLoading] = useState(false)
-  const [selectedInterviewer, setSelectedInterviewer] = useState(null)
   const [candidateAssignedInterviewerId, setCandidateAssignedInterviewerId] = useState(null)
   const [interviewDetails, setInterviewDetails] = useState({
     company: {
@@ -64,76 +62,85 @@ const TimeslotsPageContent = () => {
   const [openDialog, setOpenDialog] = useState(false)
 
   useEffect(() => {
-    const candidateId = searchParams.get('candidateId')
-    if (candidateId) {
-      setCandidateId(candidateId)
+    const cid = searchParams.get('candidateId')
+    if (cid) {
+      setCandidateId(cid)
     }
   }, [searchParams])
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!candidateId) return;
+
       try {
-        // Fetch candidate data
-        const candidateDoc = await getDoc(doc(db, 'candidates', candidateId))
-        const candidateData = candidateDoc.data()
+        const response = await fetch(`${API_BASE_URL}/candidates/${candidateId}/public`);
+        if (!response.ok) throw new Error('Failed to fetch candidate');
 
-        // Store the candidate's assigned interviewer ID if it exists
-        if (candidateData.interviewerId) {
-          setCandidateAssignedInterviewerId(candidateData.interviewerId)
+        const { candidate } = await response.json();
+
+        if (candidate.interviewer_id) {
+          setCandidateAssignedInterviewerId(candidate.interviewer_id);
         }
 
-        // Fetch client data using clientId from candidate
-        const clientDoc = await getDoc(doc(db, 'Clients', candidateData.clientId))
-        const clientData = clientDoc.data()
-
-        // Fetch job data using jobId from candidate
-        const jobDoc = await getDoc(doc(db, 'jobs', candidateData.jobId))
-        const jobData = jobDoc.data()
-
-        if (!candidateData.clientId || !candidateData.jobId) {
-          console.error('Missing client or job ID');
-          toast.error('Incomplete candidate data');
-          return;
-        }
+        const clientData = candidate.client_id || {};
+        const jobData = candidate.job_id || {};
 
         setInterviewDetails({
           company: {
-            name: clientData.name,
-            logo: clientData.logo || `https://api.dicebear.com/7.x/initials/svg?seed=${clientData.name}`,
-            position: jobData.title,
+            name: clientData.name || "Company",
+            logo: clientData.logo || `https://api.dicebear.com/7.x/initials/svg?seed=${clientData.name || 'Company'}`,
+            position: jobData.title || jobData.jobTitle || "Position",
             type: "Technical Interview - Round 1",
             duration: "60 minutes",
             location: "Virtual (Zoho Meeting)",
           },
           candidate: {
-            name: candidateData.name,
-            email: candidateData.email,
-            role: jobData.jobTitle,
-            experience: candidateData.experience,
-            avatar: candidateData.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${candidateData.name}`
+            name: candidate.full_name,
+            email: candidate.email,
+            role: jobData.title || jobData.jobTitle || "Candidate",
+            experience: candidate.experience_years,
+            avatar: candidate.profile_pic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${candidate.full_name}`
           }
-        })
+        });
+
+        // Check/Set existing interview status
+        if (candidate.interview_date && candidate.interview_time) {
+          const formattedDate = format(new Date(candidate.interview_date), 'MMMM d, yyyy');
+          setMeetingDetails({
+            date: formattedDate,
+            time: candidate.interview_time,
+            meetingLink: candidate.meeting_link,
+            isExisting: true // Mark as existing to show the "Already Scheduled" dialog
+          });
+        }
+
       } catch (error) {
         console.error('Error fetching data:', error)
         toast.error('Error fetching interview details')
       }
     }
 
-    if (candidateId) {
-      fetchData()
-    }
+    fetchData()
   }, [candidateId])
 
   useEffect(() => {
     const fetchInterviewers = async () => {
       try {
-        const interviewersSnapshot = await getDocs(collection(db, 'Interviewers'))
-        const interviewersData = interviewersSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() || new Date()
-        }))
-        setInterviewers(interviewersData)
+        // Fetch all interviewers with public info + availability
+        const response = await fetch(`${API_BASE_URL}/interviewers/public/list`);
+        if (!response.ok) throw new Error("Failed to fetch interviewers");
+
+        const data = await response.json();
+        // Map backend fields to frontend expectations
+        const mappedInterviewers = (data.interviewers || []).map(i => ({
+          id: i._id,
+          name: i.name,
+          email: i.email,
+          zohoMeetId: i.zoho_meet_uid,
+          availabilitySlots: i.availability_slots || {} // Map snake_case to camelCase
+        }));
+
+        setInterviewers(mappedInterviewers)
       } catch (error) {
         console.error('Error fetching interviewers:', error)
         toast.error('Error fetching interviewers')
@@ -144,16 +151,18 @@ const TimeslotsPageContent = () => {
   }, [])
 
   useEffect(() => {
-    // Get available slots for selected date from interviewers
-    // If candidate has assigned interviewer, show only that interviewer's slots
     const getAvailableSlotsForDate = () => {
-      const dateStr = selectedDate.toDateString();
+      const dateStr = selectedDate.toDateString(); // e.g., "Mon Dec 01 2025"
+      // Note: Backend availability_slots keys MUST match this format 
+      // i.e., keys in availability_slots are "Mon Dec 01 2025" strings.
+      // If backend uses different format, we need to adjust.
+      // Assuming legacy format persisted.
+
       const availableSlotsForDate = [];
       const now = new Date();
       const isToday = selectedDate.toDateString() === now.toDateString();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-      // Filter interviewers based on candidate's assigned interviewer
       const interviewersToCheck = candidateAssignedInterviewerId
         ? interviewers.filter(interviewer => interviewer.id === candidateAssignedInterviewerId)
         : interviewers;
@@ -161,34 +170,54 @@ const TimeslotsPageContent = () => {
       interviewersToCheck.forEach(interviewer => {
         if (interviewer.availabilitySlots && interviewer.availabilitySlots[dateStr]) {
           Object.entries(interviewer.availabilitySlots[dateStr]).forEach(([time, status]) => {
-            if (status === 'available') {
-              // Convert 24h format to 12h format
-              const hour = parseInt(time.split(':')[0]);
-              const period = hour >= 12 ? 'PM' : 'AM';
-              const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-              const formattedTime = `${displayHour.toString().padStart(2, '0')}:00 ${period}`;
+            const isBooked = typeof status === 'string' && status !== 'available';
 
-              // Convert time to minutes for comparison
-              const slotMinutes = hour * 60;
+            // Convert 24h to 12h
+            const [hourStr, minStr] = time.split(':');
+            const hour = parseInt(hourStr);
+            const minute = parseInt(minStr);
 
-              // Only include slots that are current or future
-              // If it's today, filter out past slots
-              // If it's a future date, include all slots
-              if (!isToday || slotMinutes >= currentMinutes) {
-                if (!availableSlotsForDate.find(slot => slot.time === formattedTime)) {
-                  availableSlotsForDate.push({
-                    time: formattedTime,
-                    interviewerId: interviewer.id,
-                    createdAt: interviewer.createdAt
-                  });
-                }
+            const period = hour >= 12 ? 'PM' : 'AM';
+            const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+            const displayMin = minute < 10 ? `0${minute}` : minute;
+            const formattedTime = `${displayHour.toString().padStart(2, '0')}:${displayMin} ${period}`;
+
+            const slotMinutes = hour * 60 + minute;
+
+            if (!isToday || slotMinutes >= currentMinutes) {
+              const existingSlot = availableSlotsForDate.find(slot => slot.time === formattedTime);
+
+              if (!existingSlot) {
+                // Calculate end time (1 hour duration)
+                let endHour = hour + 1;
+                let endMinute = minute;
+                if (endHour >= 24) endHour -= 24;
+
+                const endPeriod = endHour >= 12 ? 'PM' : 'AM';
+                const displayEndHour = endHour === 0 ? 12 : endHour > 12 ? endHour - 12 : endHour;
+                const displayEndMin = endMinute < 10 ? `0${endMinute}` : endMinute;
+
+                const startLabel = minute === 0 ? `${displayHour} ${period}` : `${displayHour}:${displayMin} ${period}`;
+                const endLabel = endMinute === 0 ? `${displayEndHour} ${endPeriod}` : `${displayEndHour}:${displayEndMin} ${endPeriod}`;
+                const displayLabel = `${startLabel} to ${endLabel}`;
+
+                availableSlotsForDate.push({
+                  time: formattedTime,
+                  displayLabel: displayLabel,
+                  interviewerId: interviewer.id,
+                  isBooked: isBooked
+                });
+              } else if (existingSlot.isBooked && !isBooked) {
+                // If we found an available interviewer for a slot that was previously marked as booked,
+                // mark it as available.
+                existingSlot.isBooked = false;
+                existingSlot.interviewerId = interviewer.id;
               }
             }
           });
         }
       });
 
-      // Sort slots by time
       availableSlotsForDate.sort((a, b) => {
         return convertTo24Hour(a.time) - convertTo24Hour(b.time);
       });
@@ -213,69 +242,52 @@ const TimeslotsPageContent = () => {
         throw new Error('Selected slot not found');
       }
 
-      // Update candidate document in Firebase
-      const candidateRef = doc(db, 'candidates', candidateId);
+      // Schedule the meeting first to get the link
+      const meetingResult = await scheduleMeeting(slotData.interviewerId);
 
-      // Get current candidate data
-      const candidateDoc = await getDoc(candidateRef);
-      const currentData = candidateDoc.data();
+      if (!meetingResult) throw new Error("Failed to schedule meeting");
 
-      // Create update object with new interview details and explicitly remove result
-      const updateData = {
-        status: 'Scheduled',
-        interviewDate: format(selectedDate, 'EEE MMM dd yyyy'),
-        interviewTime: selectedSlot,
-        interviewerId: slotData.interviewerId
-      };
+      const { meetingLink, sessionId, presenterId, zsoid } = meetingResult;
 
-      // If result exists, we need to remove it
-      if (currentData && 'result' in currentData) {
-        updateData.result = deleteField();
-      }
-
-      await updateDoc(candidateRef, updateData);
-      console.log('✅ Updated candidate - result field should be removed');
-
-      // Update the interviewer's timeslot with candidate ID
-      const interviewerRef = doc(db, 'Interviewers', slotData.interviewerId);
-      const dateStr = selectedDate.toDateString();
-      const timeKey = selectedSlot.split(' ')[0];
-      const period = selectedSlot.split(' ')[1];
-      const hour = parseInt(timeKey.split(':')[0]);
-
-      const hour24 = period === 'PM' ? (hour === 12 ? 12 : hour + 12) : (hour === 12 ? 0 : hour);
-      const timeSlotKey = `${hour24.toString().padStart(2, '0')}:00`;
-
-      await updateDoc(interviewerRef, {
-        [`availabilitySlots.${dateStr}.${timeSlotKey}`]: candidateId
+      // Update candidate (and interviewer availability via backend hook)
+      const confirmResponse = await fetch(`${API_BASE_URL}/candidates/${candidateId}/confirm-slot`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          interviewDate: selectedDate.toDateString(),
+          interviewTime: selectedSlot,
+          interviewerId: slotData.interviewerId,
+          meetingLink,
+          sessionId,
+          presenterId,
+          zsoid
+        })
       });
 
-      // Get interviewer details for the meeting
-      const interviewerDoc = await getDoc(interviewerRef);
-      const interviewerData = interviewerDoc.data();
+      if (!confirmResponse.ok) {
+        throw new Error('Failed to confirm slot in database');
+      }
 
-      // Set initial meeting details before scheduling the meeting
+      // Set meeting details for popup
+      const interviewer = interviewers.find(i => i.id === slotData.interviewerId);
       setMeetingDetails({
         date: format(selectedDate, 'MMMM d, yyyy'),
         time: selectedSlot,
-        interviewer: interviewerData.name,
+        interviewer: interviewer?.name || "Interviewer",
         duration: interviewDetails.company.duration,
         type: interviewDetails.company.type,
-        meetingLink: '' // Will be updated after scheduling meeting
+        meetingLink: meetingLink,
+        isExisting: false // Newly created
       });
 
-      // Show success toast
-      toast.success('Interview slot confirmed! Scheduling meeting...');
-
-      // Schedule the meeting
-      await scheduleMeeting(slotData.interviewerId);
-
-      // Show the success popup
+      toast.success('Interview slot confirmed! Meeting scheduled.');
       setShowSuccessPopup(true);
 
     } catch (error) {
       console.error('Error confirming slot:', error);
-      toast.error('Error confirming interview slot');
+      toast.error('Error confirming interview slot: ' + error.message);
       setShowSuccessPopup(false);
     } finally {
       setLoading(false);
@@ -284,71 +296,24 @@ const TimeslotsPageContent = () => {
 
   const scheduleMeeting = async (selectedInterviewerId) => {
     try {
-      // Fetch candidate details again to get interviewer and recruiter IDs
-      const candidateDoc = await getDoc(doc(db, 'candidates', candidateId));
-      const candidateData = candidateDoc.data();
+      // Get interviewer details
+      const interviewer = interviewers.find(i => i.id === selectedInterviewerId);
+      if (!interviewer) throw new Error("Interviewer not found locally");
 
-      // Fetch all required data in parallel
-      const fetchPromises = [
-        getDoc(doc(db, 'Interviewers', selectedInterviewerId)),
-        getDoc(doc(db, 'jobs', candidateData.jobId)), // Added job data fetch
-        getDocs(query(collection(db, 'Users'), where('uid', '==', candidateData.createdBy)))
-      ];
+      const presenterId = interviewer.zohoMeetId || fallbackPresenterId;
 
-      // Only fetch vendor if vendorId exists
-      if (candidateData.vendorId) {
-        fetchPromises.push(getDoc(doc(db, 'Vendor', candidateData.vendorId)));
-      }
+      const meetingTopic = `Interview: ${interviewDetails.candidate.name} - ${interviewDetails.candidate.role}`;
+      const meetingAgenda = `Technical Interview for ${interviewDetails.candidate.name}`;
 
-      const results = await Promise.all(fetchPromises);
-      const interviewerDoc = results[0];
-      const vendorDoc = candidateData.vendorId ? results[3] : null;
-      const jobDoc = results[1];
-      const querySnapshot = results[2];
-
-      const interviewerData = interviewerDoc?.data();
-      if (!interviewerData) {
-        throw new Error('Interviewer data not found');
-      }
-
-      const presenterId = interviewerData?.zohoMeetId || fallbackPresenterId;
-
-      if (!presenterId) {
-        throw new Error('Selected interviewer is missing a Zoho presenter ID. Update the interviewer profile or define NEXT_PUBLIC_ZOHO_DEFAULT_PRESENTER_ID.');
-      }
-
-      const vendorData = vendorDoc ? vendorDoc.data() : null;
-      const jobData = jobDoc?.data();  // Get job data
-      if (!jobData) {
-        throw new Error('Job data not found');
-      }
-      const recruiterData = querySnapshot.docs[0]?.data() || null;
-
-      // Fetch refresh token
-      const refreshTokenResponse = await fetch('/api/refreshtoken', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!refreshTokenResponse.ok) {
-        throw new Error(`Failed to fetch refresh token: ${refreshTokenResponse.status}`);
-      }
-      const refreshTokenData = await refreshTokenResponse.json();
-
-      // Convert selected time to 24-hour format
       const [time, period] = selectedSlot.split(' ');
       const [hour, minute] = time.split(':');
       let hour24 = parseInt(hour);
       if (period === 'PM' && hour24 !== 12) hour24 += 12;
       if (period === 'AM' && hour24 === 12) hour24 = 0;
 
-      // Create date object for the meeting
       const meetingDate = new Date(selectedDate);
       meetingDate.setHours(hour24, 0, 0, 0);
 
-      // Format date for Zoho API (MMM DD, YYYY hh:mm A)
       const formattedDate = `${meetingDate.toLocaleString('en-US', {
         month: 'short',
         day: '2-digit',
@@ -359,69 +324,42 @@ const TimeslotsPageContent = () => {
         hour12: true
       }).trim()}`;
 
-      console.log(formattedDate); // Will output: "Dec 05, 2024 09:00 PM"
-
-      const meetingTopic = `Interview: ${candidateData.name} - ${jobData?.jobTitle || 'Position'}`;
-      const meetingAgenda = `Technical Interview for ${candidateData.name}`;
-
-      console.log('Meeting request data:', {
-        authToken: refreshTokenData.accessToken,
-        topic: meetingTopic,
-        agenda: meetingAgenda,
-        presenter: presenterId,
-        startTime: formattedDate,  // Will be in format: "Dec 05, 2024 09:00 PM"
-        duration: 3600000,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        participants: [
-          { email: candidateData.email },
-          { email: interviewerData.email },
-          { email: recruiterData?.email },
-          { email: vendorData?.email }
-        ].filter(p => p.email)
-      });
-
-      // Schedule meeting
-      const createMeetResponse = await fetch('/api/createmeet', {
+      const response = await fetch(`${API_BASE_URL}/meetings/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          authToken: refreshTokenData.accessToken,
+          candidateId: candidateId,
           topic: meetingTopic,
           agenda: meetingAgenda,
           presenter: presenterId,
-          startTime: formattedDate,  // Now in the correct format
-          duration: 3600000,
+          interviewerId: selectedInterviewerId,
+          startTime: formattedDate,
+          duration: 3600000, // 1 hour
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           participants: [
-            { email: candidateData.email },
-            { email: interviewerData.email },
-            { email: recruiterData?.email },
-            { email: vendorData?.email }
-          ].filter(p => p.email)
+            { email: interviewDetails.candidate.email },
+            { email: interviewer.email }
+          ]
         })
       });
 
-      if (!createMeetResponse.ok) {
-        const errorData = await createMeetResponse.json();
-        throw new Error(`Failed to schedule meeting: ${JSON.stringify(errorData)}`);
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Backend failed to create meeting");
       }
-      const meetData = await createMeetResponse.json();
 
-      // Log the full meeting response to diagnose field names
-      console.log('Full Zoho Meeting Response:', JSON.stringify(meetData, null, 2));
+      const meetData = await response.json();
 
-      // Check if we have a session object
+      // Extract links similar to previous logic
       if (meetData && meetData.session) {
-        // Try all possible field names for meeting link
         const meetingLink = meetData.session.joinLink ||
           meetData.session.join_url ||
           meetData.session.meetingLink ||
           meetData.session.meeting_link ||
           meetData.session.url;
 
-        // Try all possible field names for session ID, prioritizing meetingKey for cancellation
         const sessionId = meetData.session.meetingKey ||
           meetData.session.meeting_key ||
           meetData.session.sys_id ||
@@ -429,93 +367,33 @@ const TimeslotsPageContent = () => {
           meetData.session.session_id ||
           meetData.session.id;
 
-        console.log('Extracted - Meeting Link:', meetingLink, 'Session ID:', sessionId);
+        const zsoid = meetData.session.zsoid || meetData.session.meeting?.zsoid || null;
 
-        if (meetingLink && sessionId) {
-          // Update candidate document with meeting link and interview details
-          const candidateRef = doc(db, 'candidates', candidateId);
-          await updateDoc(candidateRef, {
-            meetingLink: meetingLink,
-            sessionId: sessionId,
-            presenterId: presenterId,
-            zsoid: meetData.session.zsoid || meetData.session.meeting?.zsoid || null,
-            interviewDate: format(meetingDate, 'EEE MMM dd yyyy'),
-            interviewTime: format(meetingDate, 'hh:mm a')
-          });
-          console.log('✅ Candidate updated with meeting link and session ID');
-
-          // Update meeting details with the meeting link
-          setMeetingDetails(prevDetails => ({
-            ...prevDetails,
-            meetingLink: meetingLink
-          }));
-        } else {
-          console.error('❌ Missing meeting link or session ID in Zoho response');
-          console.error('Available session fields:', Object.keys(meetData.session));
-          toast.warning('Meeting scheduled but link/ID not available');
-        }
-      } else {
-        console.error('❌ No session object in Zoho response');
-        toast.warning('Meeting created but response format unexpected');
+        return { meetingLink, sessionId, presenterId, zsoid };
       }
+      return null;
 
-      toast.success('Interview scheduled successfully!');
-
-    } catch (error) {
-      console.error('Error scheduling meeting:', error);
-      toast.error('Error scheduling meeting: ' + error.message);
-      setShowSuccessPopup(false);
+    } catch (e) {
+      console.error("Schedule meeting error:", e);
+      return null; // Return null to indicate failure
     }
   };
 
   const handleClosePopup = () => {
-    window.close();
+    // window.close(); // Only works if opened by script
+    setShowSuccessPopup(false);
   }
 
-  // Update the Dialog content and handling
+  // Effect to check if already scheduled (optional, good UX)
+  useEffect(() => {
+    if (meetingDetails?.meetingLink && meetingDetails?.isExisting) {
+      setOpenDialog(true);
+    }
+  }, [meetingDetails]);
+
   const handleDialogClose = () => {
     setOpenDialog(false);
-    window.close(); // Close the window when dialog is closed
   };
-
-  // Update the useEffect that checks interview status
-  useEffect(() => {
-    const checkInterviewStatus = async () => {
-      if (!candidateId) return;
-
-      try {
-        const candidateRef = doc(db, 'candidates', candidateId);
-        const candidateDoc = await getDoc(candidateRef);
-
-        if (candidateDoc.exists()) {
-          const candidateData = candidateDoc.data();
-
-          if (candidateData.interviewDate && candidateData.interviewTime && candidateData.interviewerId) {
-            // Get interviewer details
-            const interviewerDoc = await getDoc(doc(db, 'Interviewers', candidateData.interviewerId));
-            const interviewerData = interviewerDoc.data();
-
-            // Format the date properly
-            const formattedDate = format(new Date(candidateData.interviewDate), 'MMMM d, yyyy');
-
-            setInterviewDetails(prev => ({
-              ...prev,
-              scheduledDate: formattedDate,
-              scheduledTime: candidateData.interviewTime,
-              interviewer: interviewerData?.name || 'Not assigned',
-              meetingLink: candidateData.meetingLink || '',
-            }));
-            setOpenDialog(true);
-          }
-        }
-      } catch (error) {
-        console.error("Error checking interview status:", error);
-        toast.error("Error checking interview status");
-      }
-    };
-
-    checkInterviewStatus();
-  }, [candidateId]);
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark p-4 md:p-8">
@@ -575,30 +453,28 @@ const TimeslotsPageContent = () => {
                 <p className="font-medium">{interviewDetails.candidate.email}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Current Role</p>
-                <p className="font-medium">{interviewDetails.candidate.role} ({interviewDetails.candidate.experience})</p>
+                <p className="text-sm text-gray-500">Role</p>
+                <p className="font-medium">{interviewDetails.candidate.role} ({interviewDetails.candidate.experience || 'N/A'})</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Updated Date Selection */}
+        {/* Date Selection */}
         <div className="bg-surface-light dark:bg-surface-dark rounded-2xl p-6 shadow-lg">
           <h2 className="text-xl font-semibold mb-4 text-primary-500 dark:text-primary-300">
             Select Interview Date
           </h2>
           <div className="relative">
-            {/* Scroll Shadow Indicators */}
             <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-surface-light dark:from-surface-dark to-transparent pointer-events-none z-10" />
             <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-surface-light dark:from-surface-dark to-transparent pointer-events-none z-10" />
 
-            {/* Date Selector */}
             <div className="flex overflow-x-auto scrollbar-hide pb-4 gap-3 px-1 snap-x snap-mandatory">
               {next7Days.map((date) => (
                 <button
                   key={date.toString()}
                   onClick={() => setSelectedDate(date)}
-                  className={`flex-none w-[80px] p-3 rounded-xl transition-all snap-center ${selectedDate.toString() === date.toString()
+                  className={`flex-none w-[80px] p-3 rounded-xl transition-all snap-center ${selectedDate.toDateString() === date.toDateString()
                     ? 'bg-accent-500 text-white shadow-lg scale-105'
                     : 'bg-primary-50 dark:bg-primary-800 hover:bg-primary-100 dark:hover:bg-primary-700'
                     }`}
@@ -629,7 +505,6 @@ const TimeslotsPageContent = () => {
             </div>
           </div>
 
-          {/* Time Slots Grid */}
           <div className="space-y-4">
             {availableSlots.length > 0 ? (
               [
@@ -643,19 +518,26 @@ const TimeslotsPageContent = () => {
                       {slots.map((slot) => (
                         <button
                           key={slot.time}
-                          onClick={() => setSelectedSlot(slot.time)}
-                          aria-label={`Select time slot for ${format(selectedDate, 'MMMM d')} at ${slot.time}`}
-                          aria-selected={selectedSlot === slot.time}
-                          role="option"
+                          onClick={() => !slot.isBooked && setSelectedSlot(slot.time)}
+                          disabled={slot.isBooked}
                           className={`relative p-2.5 sm:p-3 rounded-lg transition-all duration-200 
                             focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2
-                            ${selectedSlot === slot.time
-                              ? 'bg-accent-500 text-white shadow-md'
-                              : 'bg-primary-50/50 dark:bg-primary-800/30 hover:bg-accent-500/90 hover:text-white'
+                            ${slot.isBooked
+                              ? 'bg-gray-100 dark:bg-gray-800/20 text-gray-400 cursor-not-allowed border border-gray-200 dark:border-gray-700'
+                              : selectedSlot === slot.time
+                                ? 'bg-accent-500 text-white shadow-md'
+                                : 'bg-primary-50/50 dark:bg-primary-800/30 hover:bg-accent-500/90 hover:text-white'
                             }`}
                         >
-                          <span className="text-sm font-medium">{slot.time}</span>
-                          {selectedSlot === slot.time && (
+                          <span className={`text-sm font-medium ${slot.isBooked ? 'line-through' : ''}`}>
+                            {slot.displayLabel || slot.time}
+                          </span>
+                          {slot.isBooked && (
+                            <span className="block text-[10px] uppercase tracking-tighter font-bold opacity-60">
+                              Booked
+                            </span>
+                          )}
+                          {!slot.isBooked && selectedSlot === slot.time && (
                             <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
                               <span className="text-white text-[10px]">✓</span>
                             </span>
@@ -679,21 +561,17 @@ const TimeslotsPageContent = () => {
           </div>
         </div>
 
-        {/* Confirmation Bar - Fixed at Bottom */}
+        {/* Confirmation Bar */}
         {selectedSlot && (
           <div className="fixed bottom-0 left-0 right-0 z-50">
-            {/* Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-surface-light dark:from-surface-dark to-transparent -top-8" />
-
-            {/* Content */}
             <div className="relative bg-surface-light dark:bg-surface-dark border-t border-gray-200 dark:border-gray-700 backdrop-blur-sm bg-opacity-95 dark:bg-opacity-95 p-3 sm:p-4">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                {/* Selected Time Info */}
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-accent-500" />
                     <p className="text-sm font-medium text-primary-500">
-                      {format(selectedDate, 'MMMM d')} at {selectedSlot}
+                      {format(selectedDate, 'MMMM d')} at {availableSlots.find(s => s.time === selectedSlot)?.displayLabel || selectedSlot}
                     </p>
                   </div>
                   <p className="text-xs text-gray-500 pl-4">
@@ -701,7 +579,6 @@ const TimeslotsPageContent = () => {
                   </p>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex gap-2 w-full sm:w-auto">
                   <button
                     onClick={() => setSelectedSlot(null)}
@@ -709,8 +586,7 @@ const TimeslotsPageContent = () => {
                       border border-gray-300 dark:border-gray-600 
                       text-gray-700 dark:text-gray-300 
                       hover:bg-gray-100 dark:hover:bg-gray-800 
-                      transition-all duration-200
-                      hover:shadow-sm active:scale-95"
+                      transition-all duration-200"
                     disabled={loading}
                   >
                     Cancel
@@ -722,8 +598,6 @@ const TimeslotsPageContent = () => {
                       bg-accent-500 text-white font-medium
                       hover:bg-accent-600
                       transition-all duration-200
-                      hover:shadow-sm active:scale-95
-                      disabled:opacity-50 disabled:cursor-not-allowed
                       flex items-center justify-center gap-2"
                   >
                     {loading ? (
@@ -759,13 +633,7 @@ const TimeslotsPageContent = () => {
               <div className="border-b dark:border-gray-700 pb-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Date & Time</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {meetingDetails.date} at {meetingDetails.time}
-                </p>
-              </div>
-              <div className="border-b dark:border-gray-700 pb-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">Interview Details</p>
-                <p className="font-medium text-gray-900 dark:text-white">
-                  {meetingDetails.type} ({meetingDetails.duration})
+                  {meetingDetails.date} at {availableSlots.find(s => s.time === meetingDetails.time)?.displayLabel || meetingDetails.time}
                 </p>
               </div>
               <div className="border-b dark:border-gray-700 pb-4">
@@ -797,54 +665,6 @@ const TimeslotsPageContent = () => {
         </div>
       )}
 
-      <Dialog
-        open={openDialog}
-        onClose={handleDialogClose}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle className="text-center">
-          Interview Already Scheduled
-        </DialogTitle>
-        <DialogContent>
-          <div className="space-y-4 mt-2">
-            <div className="text-center bg-primary-50 dark:bg-primary-900 p-4 rounded-lg">
-              <p className="text-lg font-semibold text-primary-600 dark:text-primary-300">
-                {interviewDetails.company?.name}
-              </p>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {interviewDetails.company?.type}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {interviewDetails.meetingLink && (
-                <div>
-                  <p className="text-sm text-gray-500">Meeting Link</p>
-                  <a
-                    href={interviewDetails.meetingLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent-500 hover:text-accent-600 break-all"
-                  >
-                    {interviewDetails.meetingLink}
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-        <DialogActions className="p-4">
-          <Button
-            onClick={handleDialogClose}
-            variant="contained"
-            fullWidth
-            style={{ backgroundColor: '#6366f1' }}
-          >
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
     </div>
   )
 }

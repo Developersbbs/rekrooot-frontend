@@ -252,15 +252,18 @@ const CustomCalendar = ({ value, onChange, availabilitySlots, className }: any) 
       className={className || "w-full h-full flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"}
       tileClassName={({ date }) => {
         const dateStr = date.toDateString();
-        const hasSlots = availabilitySlots[dateStr]?.length > 0;
+        const isActive = value && date.toDateString() === value.toDateString();
+        const hasSlots = availabilitySlots[dateStr] && Object.keys(availabilitySlots[dateStr]).some(k => availabilitySlots[dateStr][k] === 'available');
+
         return `
           relative w-full h-full p-4 text-center
-          hover:bg-primary-50 dark:hover:bg-primary-900/20
-          focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
           rounded-lg transition-all duration-200
-          ${hasSlots
-            ? 'font-bold text-primary-600 dark:text-primary-300'
-            : 'text-gray-600 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white'}
+          ${isActive
+            ? '!bg-primary-500 !text-white shadow-lg scale-105 z-10'
+            : 'hover:bg-primary-50 dark:hover:bg-primary-900/20'}
+          ${hasSlots && !isActive
+            ? 'font-bold text-primary-600 dark:text-primary-300 ring-2 ring-primary-500/30'
+            : !isActive ? 'text-gray-600 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white' : ''}
         `;
       }}
       navigationLabel={({ date }) => (
@@ -283,20 +286,14 @@ const CustomCalendar = ({ value, onChange, availabilitySlots, className }: any) 
         </div>
       }
       formatShortWeekday={(locale, date) => {
-        // Return abbreviated weekday name (3 letters)
         return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
       }}
-      calendarType="iso8601" // This ensures Monday is the first day of the week
-      showFixedNumberOfWeeks={true} // This ensures consistent calendar height
+      calendarType="iso8601"
+      showFixedNumberOfWeeks={true}
     />
   );
 };
 
-// Helper function to format weekday names
-const formatWeekday = (date: any) => {
-  const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  return weekdays[date.getDay()];
-};
 
 // Helper function to format time to AM/PM
 const formatTime = (hour: number) => {
@@ -548,7 +545,7 @@ const InterviewerProfilePage = () => {
 
   const [scheduledInterviews, setScheduledInterviews] = useState<ScheduledInterview[]>([]);
   const [isLoadingInterviews, setIsLoadingInterviews] = useState(false);
-  const [selectedInterviewDate, setSelectedInterviewDate] = useState<Date | null>(null);
+  const [selectedInterviewDate, setSelectedInterviewDate] = useState<Date | null>(new Date());
 
   // Declare selectedTime state (not used but kept for potential UI extensions)
   const [selectedTime, setSelectedTime] = useState<Date | null>(null);
@@ -574,8 +571,6 @@ const InterviewerProfilePage = () => {
         const user = auth.currentUser;
         if (user) {
           token = await user.getIdToken();
-        } else if (typeof window !== 'undefined') {
-          token = localStorage.getItem('auth_token');
         }
 
         if (!token) {
@@ -626,7 +621,14 @@ const InterviewerProfilePage = () => {
       }
     };
 
-    void loadInterviewer();
+    if (auth.currentUser) {
+      void loadInterviewer();
+    } else {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) void loadInterviewer();
+      });
+      return () => unsubscribe();
+    }
   }, [interviewerId]);
 
   // Load scheduled interviews from backend
@@ -693,8 +695,6 @@ const InterviewerProfilePage = () => {
         const user = auth.currentUser;
         if (user) {
           token = await user.getIdToken();
-        } else if (typeof window !== 'undefined') {
-          token = localStorage.getItem('auth_token');
         }
 
         if (!token) {
@@ -702,7 +702,7 @@ const InterviewerProfilePage = () => {
           return;
         }
 
-        const res = await apiFetch<{ availability: { start_time: string; end_time: string }[] }>(
+        const res = await apiFetch<{ availability: { start_time: string; end_time: string; status?: number; candidate_id?: any }[] }>(
           `/interviewers/${interviewerId}/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
           { token }
         );
@@ -714,7 +714,7 @@ const InterviewerProfilePage = () => {
           baseSlots[label] = SlotStatus.UNAVAILABLE;
         }
 
-        // Mark hours that overlap with any availability interval as AVAILABLE
+        // Mark hours that overlap with any availability interval
         for (const item of res.availability || []) {
           const startUtc = new Date(item.start_time);
           const endUtc = new Date(item.end_time);
@@ -732,7 +732,14 @@ const InterviewerProfilePage = () => {
             const overlaps = slotStartUtc < endUtc && slotEndUtc > startUtc;
             if (overlaps) {
               const label = `${hour.toString().padStart(2, '0')}:00`;
-              baseSlots[label] = SlotStatus.AVAILABLE;
+              if (item.status === 2) {
+                // If status is 2, it's booked/scheduled
+                // We'll use a special string format that renderTimeSlot expects for scheduled slots: "scheduled:CandidateName"
+                const candidateName = item.candidate_id?.full_name || 'Booked';
+                baseSlots[label] = `scheduled:${candidateName}`;
+              } else {
+                baseSlots[label] = SlotStatus.AVAILABLE;
+              }
             }
           }
         }
@@ -752,7 +759,14 @@ const InterviewerProfilePage = () => {
       }
     };
 
-    void loadAvailability();
+    if (auth.currentUser) {
+      void loadAvailability();
+    } else {
+      const unsubscribe = auth.onAuthStateChanged((user) => {
+        if (user) void loadAvailability();
+      });
+      return () => unsubscribe();
+    }
   }, [interviewerId, selectedDate]);
 
   useEffect(() => {
@@ -881,12 +895,12 @@ const InterviewerProfilePage = () => {
 
   // Render the profile header with enhanced styling
   const renderProfileHeader = () => (
-    <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-xl transition-all hover:shadow-2xl border border-gray-100 dark:border-gray-700">
+    <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-xl transition-all border border-gray-100 dark:border-gray-700">
       <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
         {/* Profile Image */}
         <div className="relative group">
           {interviewer?.photoURL ? (
-            <div className="relative w-40 h-40 rounded-2xl overflow-hidden ring-4 ring-primary-500 ring-offset-4 ring-offset-surface-light dark:ring-offset-gray-800 transition-all duration-300 group-hover:scale-105 group-hover:rotate-3">
+            <div className="relative w-40 h-40 rounded-2xl overflow-hidden ring-4 ring-primary-500 ring-offset-4 ring-offset-surface-light dark:ring-offset-gray-800 transition-all duration-300">
               <Image
                 src={interviewer.photoURL}
                 alt={interviewer.name}
@@ -972,6 +986,11 @@ const InterviewerProfilePage = () => {
     );
   }, [scheduledInterviews, selectedInterviewDate]);
 
+  // Sync scheduled interviews date with calendar selection
+  useEffect(() => {
+    setSelectedInterviewDate(selectedDate);
+  }, [selectedDate]);
+
   // Update the interview list rendering
   const renderScheduledInterviews = () => (
     <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-xl border border-gray-100 dark:border-gray-700">
@@ -989,7 +1008,7 @@ const InterviewerProfilePage = () => {
         <div className="flex items-center gap-2">
           <input
             type="date"
-            value={selectedInterviewDate ? selectedInterviewDate.toISOString().split('T')[0] : ''}
+            value={selectedInterviewDate ? `${selectedInterviewDate.getFullYear()}-${(selectedInterviewDate.getMonth() + 1).toString().padStart(2, '0')}-${selectedInterviewDate.getDate().toString().padStart(2, '0')}` : ''}
             onChange={(e) => setSelectedInterviewDate(e.target.value ? new Date(e.target.value) : null)}
             className={`${INPUT_CLASS} !w-auto`}
           />

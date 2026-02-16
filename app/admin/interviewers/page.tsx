@@ -29,8 +29,7 @@ type Interviewer = {
   email: string;
   contact?: string;
   logo?: string;
-  skills?: string[];
-  technologies?: string[];
+  technologies?: { _id: string; name: string }[];
 };
 
 const InterviewerImage = ({ src, alt, className }: { src?: string; alt: string; className?: string }) => {
@@ -83,9 +82,6 @@ const InterviewersPage = () => {
       }
 
       let url = "/interviewers";
-      if (selectedCompany?.id && selectedCompany.id !== "all") {
-        url += `?company_id=${selectedCompany.id}`;
-      }
 
       const res = await apiFetch<{ interviewers: Interviewer[] }>(url, {
         token,
@@ -152,9 +148,6 @@ const InterviewersPage = () => {
         const token = await user.getIdToken();
 
         let url = "/interviewers";
-        if (selectedCompany?.id && selectedCompany.id !== "all") {
-          url += `?company_id=${selectedCompany.id}`;
-        }
 
         const res = await apiFetch<{ interviewers: Interviewer[] }>(url, {
           token,
@@ -313,15 +306,15 @@ const InterviewersPage = () => {
                   </div>
                 </div>
 
-                {/* Skills */}
-                {interviewer.skills && interviewer.skills.length > 0 && (
+                {/* Technologies */}
+                {interviewer.technologies && interviewer.technologies.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {interviewer.skills.map((tech) => (
+                    {interviewer.technologies.map((tech) => (
                       <span
-                        key={tech}
+                        key={typeof tech === 'string' ? tech : tech._id}
                         className="px-3 py-1 text-xs font-medium rounded-full bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 border border-orange-200/60 dark:border-orange-800/60 shadow-sm"
                       >
-                        {tech}
+                        {typeof tech === 'string' ? tech : tech.name}
                       </span>
                     ))}
                   </div>

@@ -5,7 +5,7 @@ import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import { db, storage, auth } from '@/lib/firebase'
 import { FiUpload, FiX } from 'react-icons/fi'
-import { toast, Toaster } from 'react-hot-toast'
+import { toast } from 'react-hot-toast'
 import Cookies from 'js-cookie'
 import { apiFetch } from '@/lib/api'
 
@@ -181,19 +181,12 @@ const AddNewCandidate = ({
     setIsLoadingTimeSlots(true)
     try {
       const token = await auth.currentUser?.getIdToken();
-      const response = await fetch('/api/gettimeslots', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({
-          interviewerId: formData.interviewerId
-        })
-      })
+      // Use rekrooot-server endpoint
+      const data = await apiFetch(`/interviewers/${formData.interviewerId}/timeslots`, {
+        token
+      });
 
-      if (response.ok) {
-        const data = await response.json()
+      if (data.success) {
         setAvailableTimeSlots(data.timeSlots || [])
       } else {
         console.error('Failed to fetch time slots')
@@ -220,12 +213,23 @@ const AddNewCandidate = ({
   // Validate form before submission
   const validateCompanySelection = () => {
     const userDataCookie = Cookies.get('userData')
-    const selectedCompanyCookie = Cookies.get('selectedCompany')
-    const userData = userDataCookie ? JSON.parse(userDataCookie) : null
-    const selectedCompany = selectedCompanyCookie ? JSON.parse(selectedCompanyCookie) : null
+    const selectedCompanyStr = localStorage.getItem('selectedCompany')
 
-    if (userData?.role === 'SuperAdmin' && !selectedCompany) {
-      setCompanyValidationError('Please select a company before adding a candidate')
+    let role = user?.role;
+    if (!role && userDataCookie) {
+      try {
+        const userData = JSON.parse(userDataCookie);
+        role = userData.role;
+      } catch (e) {
+        console.error("Error parsing user cookie", e);
+      }
+    }
+
+    const selectedCompany = selectedCompanyStr ? JSON.parse(selectedCompanyStr) : null;
+    const companyId = selectedCompany?.id;
+
+    if (role === 'SuperAdmin' && (!companyId || companyId === 'all')) {
+      setCompanyValidationError('Please select a specific company (not "All") to add a candidate.')
       return false
     }
 
@@ -301,7 +305,7 @@ const AddNewCandidate = ({
           uid: userData.uid,
           name: userData.name,
           email: userData.email,
-          company: userData.company || 'Default Company'
+          role: userData.role, // Add role here
         })
       } catch (error) {
         console.error('Error parsing userData cookie:', error)
@@ -517,198 +521,221 @@ const AddNewCandidate = ({
       // If editing, use handleEditSubmit
       if (isEditing && candidateData) {
         await handleEditSubmit();
-      } else {
-        // Add new candidate logic
-        let profilePicUrl = null;
-        const timestamp = Date.now();
+        return;
+      }
 
-        if (formData.profilePic) {
-          const safeName = formData.profilePic.name.replace(/[^a-zA-Z0-9.]/g, '_');
+      // Add new candidate logic
+      let profilePicUrl = null;
+      const timestamp = Date.now();
+
+      if (formData.profilePic) {
+        const safeName = formData.profilePic.name.replace(/[^a-zA-Z0-9.]/g, '_');
+        const uniqueName = `${timestamp}_${safeName}`;
+        const profilePicRef = ref(storage, `profilePics/${uniqueName}`);
+        await uploadBytes(profilePicRef, formData.profilePic);
+        profilePicUrl = await getDownloadURL(profilePicRef);
+      }
+
+      // Upload resumes
+      const uploadedResumes = await Promise.all(
+        resume.map(async (doc) => {
+          const safeName = doc.name.replace(/[^a-zA-Z0-9.]/g, '_');
           const uniqueName = `${timestamp}_${safeName}`;
-          const profilePicRef = ref(storage, `profilePics/${uniqueName}`);
-          await uploadBytes(profilePicRef, formData.profilePic);
-          profilePicUrl = await getDownloadURL(profilePicRef);
+          const docRef = ref(storage, `resumes/${uniqueName}`);
+          await uploadBytes(docRef, doc);
+          const url = await getDownloadURL(docRef);
+          return {
+            name: doc.name,
+            url: url
+          };
+        })
+      );
+
+      // Upload supporting documents
+      const uploadedSupportingDocs = await Promise.all(
+        supportingDocuments.map(async (doc) => {
+          const safeName = doc.name.replace(/[^a-zA-Z0-9.]/g, '_');
+          const uniqueName = `${timestamp}_${safeName}`;
+          const docRef = ref(storage, `documents/${uniqueName}`);
+          await uploadBytes(docRef, doc);
+          const url = await getDownloadURL(docRef);
+          return {
+            name: doc.name,
+            url: url
+          };
+        })
+      );
+
+      const selectedCompanyStr = localStorage.getItem('selectedCompany');
+      const selectedCompany = selectedCompanyStr ? JSON.parse(selectedCompanyStr) : null;
+      let companyId = selectedCompany?.id;
+
+      if (companyId === 'all' || (companyId && !/^[0-9a-fA-F]{24}$/.test(companyId))) {
+        if (user?.role === 'SuperAdmin') {
+          toast.error('Please select a specific company (not "All") to add a candidate.');
+          setIsSubmitting(false);
+          return;
         }
+        companyId = undefined;
+      }
 
-        // Upload resumes
-        const uploadedResumes = await Promise.all(
-          resume.map(async (doc) => {
-            const safeName = doc.name.replace(/[^a-zA-Z0-9.]/g, '_');
-            const uniqueName = `${timestamp}_${safeName}`;
-            const docRef = ref(storage, `resumes/${uniqueName}`);
-            await uploadBytes(docRef, doc);
-            const url = await getDownloadURL(docRef);
-            return {
-              name: doc.name,
-              url: url
-            };
-          })
-        );
+      let finalInterviewerId = formData.interviewerId;
+      const currentJobData = jobs.find(j => j.id === formData.jobId);
 
-        // Upload supporting documents
-        const uploadedSupportingDocs = await Promise.all(
-          supportingDocuments.map(async (doc) => {
-            const safeName = doc.name.replace(/[^a-zA-Z0-9.]/g, '_');
-            const uniqueName = `${timestamp}_${safeName}`;
-            const docRef = ref(storage, `documents/${uniqueName}`);
-            await uploadBytes(docRef, doc);
-            const url = await getDownloadURL(docRef);
-            return {
-              name: doc.name,
-              url: url
-            };
-          })
-        );
+      if (!finalInterviewerId && currentJobData && currentJobData.technologies?.length > 0) {
+        try {
+          const jobTechIds = currentJobData.technologies.map(t => (t && typeof t === 'object') ? t._id : t);
+          const matchingInterviewer = interviewers.find(interviewer => {
+            if (!interviewer.technologies) return false;
+            const techArray = Array.isArray(interviewer.technologies) ? interviewer.technologies : [];
+            return techArray.some(techId => {
+              const idToCheck = (techId && typeof techId === 'object') ? techId._id : techId;
+              return jobTechIds.includes(idToCheck);
+            });
+          });
 
-        const selectedCompanyStr = localStorage.getItem('selectedCompany');
-        const selectedCompany = selectedCompanyStr ? JSON.parse(selectedCompanyStr) : null;
-        let companyId = selectedCompany?.id;
-
-        if (companyId === 'all' || (companyId && !/^[0-9a-fA-F]{24}$/.test(companyId))) {
-          if (user?.role === 'SuperAdmin') {
-            toast.error('Please select a specific company (not "All") to add a candidate.');
-            setIsSubmitting(false);
-            return;
+          if (matchingInterviewer) {
+            finalInterviewerId = matchingInterviewer.id;
+          } else {
+            console.log('No matching interviewer found for job technologies.');
           }
-
-          companyId = undefined;
+        } catch (autoAssignError) {
+          console.error('Error during auto-assignment:', autoAssignError);
         }
+      }
 
-        const payload = {
-          job_id: formData.jobId,
-          client_id: formData.clientId,
-          vendor_id: formData.vendorId || null,
-          full_name: formData.name,
-          email: formData.email,
-          location: formData.location,
-          primary_contact: formData.primaryContact,
-          secondary_contact: formData.secondaryContact,
-          experience_years: formData.experience,
-          status: selectedTimeSlot ? '2' : '1',
-          profile_pic: profilePicUrl,
-          resumes: uploadedResumes,
-          supporting_documents: uploadedSupportingDocs,
-          company_id: companyId
-        };
+      if (!finalInterviewerId) {
+        setIsSubmitting(false);
+        toast.error('No interviewer found matching the job requirements. Please select an interviewer manually to proceed.');
+        return;
+      }
+      let interviewerData = null;
+      if (finalInterviewerId) {
+        try {
+          const interviewerRes = await apiFetch(`/interviewers/${finalInterviewerId}`, { token });
+          interviewerData = interviewerRes.interviewer;
+        } catch (error) {
+          console.error('Error fetching interviewer details:', error);
+        }
+      }
 
-        const res = await apiFetch('/candidates', {
-          method: 'POST',
-          token,
-          body: JSON.stringify(payload)
-        });
+      console.log('Proceeding with interviewer:', finalInterviewerId);
 
-        const newCandidate = res.candidate;
+      const payload = {
+        job_id: formData.jobId,
+        client_id: formData.clientId,
+        vendor_id: formData.vendorId || null,
+        full_name: formData.name,
+        email: formData.email,
+        location: formData.location,
+        primary_contact: formData.primaryContact,
+        secondary_contact: formData.secondaryContact,
+        experience_years: formData.experience,
+        status: selectedTimeSlot ? '2' : '1',
+        profile_pic: profilePicUrl,
+        resumes: uploadedResumes,
+        supporting_documents: uploadedSupportingDocs,
+        company_id: companyId,
+        interviewer_id: finalInterviewerId,
+        presenterId: interviewerData?.zoho_meet_uid || '60058686791'
+      };
 
-        if (formData.interviewerId && newCandidate._id) {
-          try {
-            const token = await auth.currentUser?.getIdToken();
-            if (token) {
-              const interviewerRef = doc(db, 'Interviewers', formData.interviewerId);
-              const interviewerDoc = await getDoc(interviewerRef);
-              if (interviewerDoc.exists()) {
-                const interviewerData = interviewerDoc.data();
-                await apiFetch(`/candidates/${newCandidate._id}`, {
-                  method: 'PUT',
-                  token,
-                  body: JSON.stringify({
-                    presenterId: interviewerData.zohoMeetId || '60058686791'
-                  })
-                });
+      const res = await apiFetch('/candidates', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(payload)
+      });
 
-                if (selectedSlotData) {
-                  await updateDoc(interviewerRef, {
-                    [`availabilitySlots.${selectedSlotData.date}.${selectedSlotData.time}`]: newCandidate._id,
-                    assignedCandidates: arrayUnion(newCandidate._id)
-                  });
-                }
-              }
-            }
-          } catch (updateError) {
-            console.error('Error updating interviewer availability:', updateError);
+      const newCandidate = res.candidate;
+      console.log('Candidate created:', newCandidate?._id);
+
+      if (!newCandidate) throw new Error('Failed to create candidate');
+
+      if (finalInterviewerId && newCandidate._id && interviewerData) {
+        try {
+          if (selectedSlotData) {
+            const updatedSlots = { ...interviewerData.availability_slots };
+            if (!updatedSlots[selectedSlotData.date]) updatedSlots[selectedSlotData.date] = {};
+            updatedSlots[selectedSlotData.date][selectedSlotData.time] = newCandidate._id;
+
+            const existingAssigned = Array.isArray(interviewerData.assigned_candidates)
+              ? interviewerData.assigned_candidates.map(c => typeof c === 'object' ? c._id : c)
+              : [];
+
+            const updatedCandidates = Array.from(new Set([...existingAssigned, newCandidate._id]));
+
+            await apiFetch(`/interviewers/${finalInterviewerId}`, {
+              method: 'PUT',
+              token,
+              body: JSON.stringify({
+                availability_slots: updatedSlots,
+                assigned_candidates: updatedCandidates
+              })
+            });
           }
+        } catch (updateError) {
+          console.error('Error updating interviewer availability:', updateError);
         }
 
         const jobData = jobs.find(j => j.id === formData.jobId);
         const clientData = clients.find(c => c.id === formData.clientId);
         const vendorData = vendors.find(v => v.id === formData.vendorId);
-        const interviewerData = interviewers.find(i => i.id === formData.interviewerId);
 
         let meetingLink = null;
         let sessionId = null;
 
-        if (formData.interviewerId && selectedSlotData && interviewerData && jobData && clientData) {
+        if (selectedSlotData && jobData && clientData) {
           try {
-            const tokenResponse = await fetch('/api/refreshtoken', { method: 'POST' });
-            const tokenData = await tokenResponse.json();
+            // Use rekrooot-server endpoint for meeting creation
+            const [hours, minutes] = selectedSlotData.time24 ? selectedSlotData.time24.split(':') : selectedSlotData.time.split(':');
+            const meetingDate = new Date(selectedSlotData.date);
+            meetingDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
-            if (tokenData.accessToken) {
-              const [hours, minutes] = selectedSlotData.time.split(':');
-              const meetingDate = new Date(selectedSlotData.date);
-              meetingDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+            const meetingPayload = {
+              topic: `Interview: ${formData.name} for ${jobData.jobTitle || jobData.title}`,
+              agenda: `Technical Interview for ${jobData.jobTitle || jobData.title} position at ${clientData.name}`,
+              presenter: interviewerData.zoho_meet_uid || interviewerData.zohoMeetId || '60058686791',
+              startTime: `${meetingDate.toLocaleString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric'
+              })} ${meetingDate.toLocaleString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+              }).trim()}`,
+              duration: 3600000,
+              timezone: "Asia/Kolkata",
+              participants: [
+                { email: formData.email, name: formData.name },
+                { email: interviewerData.email, name: interviewerData.name }
+              ],
+              interviewerId: finalInterviewerId,
+              candidateId: newCandidate._id
+            };
 
-              const meetingPayload = {
-                authToken: tokenData.accessToken,
-                topic: `Interview: ${formData.name} for ${jobData.jobTitle || jobData.title}`,
-                agenda: `Technical Interview for ${jobData.jobTitle || jobData.title} position at ${clientData.name}`,
-                presenter: interviewerData.zohoMeetId || interviewerData.zoho_meet_uid || '60058686791',
-                startTime: `${meetingDate.toLocaleString('en-US', {
-                  month: 'short',
-                  day: '2-digit',
-                  year: 'numeric'
-                })} ${meetingDate.toLocaleString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true
-                }).trim()}`,
-                duration: 3600000,
-                timezone: "Asia/Kolkata",
-                participants: [
-                  { email: formData.email, name: formData.name },
-                  { email: interviewerData.email, name: interviewerData.name }
-                ]
-              };
+            const meetData = await apiFetch('/meetings/create', {
+              method: 'POST',
+              token,
+              body: JSON.stringify(meetingPayload)
+            });
 
-              const meetResponse = await fetch('/api/createmeet', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(meetingPayload)
-              });
-
-              const meetData = await meetResponse.json();
-
-              if (meetData.session) {
-                meetingLink = meetData.session.joinLink || meetData.session.join_url || meetData.session.meetingLink || meetData.session.meeting_link || meetData.session.url;
-                sessionId = meetData.session.meetingKey || meetData.session.meeting_key || meetData.session.sys_id || meetData.session.sessionId || meetData.session.session_id || meetData.session.id;
-
-                if (meetingLink && sessionId) {
-                  const token = await auth.currentUser?.getIdToken();
-                  // Update candidate via API
-                  await apiFetch(`/candidates/${newCandidate._id}`, {
-                    method: 'PUT',
-                    token,
-                    body: JSON.stringify({
-                      meetingLink: meetingLink,
-                      sessionId: sessionId,
-                      presenterId: interviewerData.zohoMeetId || interviewerData.zoho_meet_uid || '60058686791',
-                      zsoid: meetData.session.zsoid || meetData.session.meeting?.zsoid || null
-                    })
-                  });
-                }
-              }
+            if (meetData.session) {
+              const session = meetData.session;
+              meetingLink = session.joinLink || session.join_url || session.meetingLink || session.meeting_link || session.url;
+              sessionId = session.meetingKey || session.meeting_key || session.sys_id || session.sessionId || session.session_id || session.id;
             }
           } catch (meetError) {
-            console.error('Error creating Zoho meeting:', meetError);
+            console.error('Error creating Zoho meeting via server:', meetError);
           }
         }
 
-        const baseUrl = process.env.NEXT_PUBLIC_URL;
+        const baseUrl = process.env.NEXT_PUBLIC_URL || window.location.origin;
         const schedulingLink = `${baseUrl}/timeslots?candidateId=${newCandidate._id}`;
 
-        const emailResponse = await fetch('/api/sendslot', {
+        const emailResult = await apiFetch('/emails/send-interview-slot', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          token,
           body: JSON.stringify({
             candidateEmail: formData.email,
             candidateName: formData.name,
@@ -719,12 +746,9 @@ const AddNewCandidate = ({
             interviewerName: interviewerData?.name || 'Interviewer',
             selectedTimeSlot: selectedTimeSlot,
             sendDirectInvitation: !!selectedTimeSlot,
-            link: selectedTimeSlot ? meetingLink : schedulingLink
+            link: selectedTimeSlot && meetingLink ? meetingLink : schedulingLink
           }),
         });
-
-        const emailResult = await emailResponse.json();
-
         if (!emailResult.success) {
           toast.error('Candidate added but failed to send notifications');
         } else {
@@ -737,7 +761,7 @@ const AddNewCandidate = ({
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error(`Failed to ${isEditing ? 'update' : 'add'} candidate: ${error.message}`);
+      toast.error(`Failed to add candidate: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -750,6 +774,14 @@ const AddNewCandidate = ({
 
   const handleExitDuplicate = () => {
     setShowDuplicateModal(false);
+    resetForm();
+    onClose();
+  };
+
+  const handleCancel = () => {
+    if (isSubmitting) return;
+    resetForm();
+    onClose();
   };
 
   const resetForm = () => {
@@ -880,16 +912,16 @@ const AddNewCandidate = ({
       }
 
       // Set client and job selections
-      if (candidateData.clientId) {
-        setCurrentSelectedClient(clients.find(client => client.id === candidateData.clientId));
+      if (candidateData.client_id) {
+        setCurrentSelectedClient(clients.find(client => client.id === candidateData.client_id));
       }
-      if (candidateData.jobId) {
-        setCurrentSelectedJob(jobs.find(job => job.id === candidateData.jobId));
+      if (candidateData.job_id) {
+        setCurrentSelectedJob(jobs.find(job => job.id === candidateData.job_id));
       }
 
       // Set interviewer search term if interviewer is selected
-      if (candidateData.interviewerId) {
-        const selectedInterviewer = interviewers.find(i => i.id === candidateData.interviewerId);
+      if (candidateData.interviewer_id) {
+        const selectedInterviewer = interviewers.find(i => i.id === candidateData.interviewer_id);
         if (selectedInterviewer) {
           setInterviewerSearchTerm(`${selectedInterviewer.name || selectedInterviewer.email}${selectedInterviewer.role ? ` - ${selectedInterviewer.role}` : ''}`);
         }
@@ -974,11 +1006,12 @@ const AddNewCandidate = ({
   return (
     <Dialog
       open={isOpen}
-      onClose={() => !isSubmitting && onClose()}
+      onClose={handleCancel}
       className="relative z-50"
     >
       <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-      <Toaster />
+
+
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel className="w-full max-w-4xl max-h-[90vh] transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow-xl flex flex-col">
@@ -987,7 +1020,7 @@ const AddNewCandidate = ({
               {dialogTitle}
             </Dialog.Title>
             <button
-              onClick={onClose}
+              onClick={handleCancel}
               className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
             >
               <FiX className="h-5 w-5" />
@@ -1347,7 +1380,7 @@ const AddNewCandidate = ({
               <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleCancel}
                   disabled={isSubmitting}
                   className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
@@ -1434,7 +1467,7 @@ const AddNewCandidate = ({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                       <div>
                         <span className="font-medium text-gray-700 dark:text-gray-300">Company:</span>
-                        <p className="text-gray-600 dark:text-gray-400">{candidate.company}</p>
+                        <p className="text-gray-600 dark:text-gray-400">{candidate.company_id?.name || candidate.company || 'N/A'}</p>
                       </div>
 
                       {(candidate.client_id || candidate.clientDetails) && (

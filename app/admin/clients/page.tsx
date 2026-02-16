@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
-import { toast, Toaster } from 'react-hot-toast'
+import { toast } from 'react-hot-toast'
 import { apiFetch } from '@/lib/api'
 import { auth } from '@/lib/firebase'
 
@@ -314,7 +314,7 @@ const ClientsPage = () => {
 
     return (
         <div className="p-6 min-h-screen">
-            <Toaster />
+
 
             <div className="flex justify-between items-center mb-12">
                 <h1 className="text-4xl font-bold text-gray-800 dark:text-gray-100">

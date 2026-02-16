@@ -13,8 +13,7 @@ type CreateInterviewerProps = {
     email: string;
     contact?: string;
     zoho_meet_uid?: string;
-    skills?: string[];
-    technologies?: string[];
+    technologies?: { _id: string; name: string }[] | string[];
     logo?: string;
   };
 };
@@ -36,8 +35,14 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
   );
   const [techSearch, setTechSearch] = useState('');
   const [technologies, setTechnologies] = useState<Technology[]>([]);
-  const [selectedTechIds, setSelectedTechIds] = useState<string[]>(interviewer?.technologies ?? []);
-  const [selectedTechNames, setSelectedTechNames] = useState<string[]>(interviewer?.skills ?? []);
+  const [selectedTechIds, setSelectedTechIds] = useState<string[]>(() => {
+    if (!interviewer?.technologies) return [];
+    return interviewer.technologies.map(t => typeof t === 'string' ? t : t._id);
+  });
+  const [selectedTechNames, setSelectedTechNames] = useState<string[]>(() => {
+    if (!interviewer?.technologies) return [];
+    return interviewer.technologies.map(t => typeof t === 'string' ? t : t.name);
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -121,8 +126,6 @@ export default function CreateInterviewer({ onClose, onInterviewerAdded, intervi
         email: email.trim(),
         contact: phone.trim() || undefined,
         zoho_meet_uid: zohoUid.trim() || undefined,
-        // Send both human-readable skills and referenced technology IDs
-        skills: selectedTechNames,
         technologies: selectedTechIds,
         logo: logoUrl || undefined,
       };

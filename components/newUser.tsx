@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiUserPlus, FiX } from 'react-icons/fi';
 import { apiFetch, ApiError } from '@/lib/api';
 import { auth } from '@/lib/firebase';
-import { Toaster, toast } from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
 
 type NewUserProps = {
     onClose: () => void;
@@ -314,7 +314,6 @@ export default function NewUser({ onClose }: NewUserProps) {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             onClick={onClose}
         >
-            <Toaster />
             <div
                 className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800"
                 onClick={(e) => e.stopPropagation()}

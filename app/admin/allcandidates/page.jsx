@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { FiSearch } from 'react-icons/fi'
 import Image from 'next/image'
 import AddNewCandidate from '@/components/addnewcandidate'
-import { toast, Toaster } from 'react-hot-toast'
+import { toast } from 'react-hot-toast'
 import CandidateProfile from '@/components/candidateprofile'
 import RescheduleModal from '@/components/reschedulemodal'
 import { CalendarX, Edit, Trash, CalendarClock, MoreVertical, Mail } from 'lucide-react'
@@ -180,6 +180,9 @@ const AllCandidates = () => {
       profile_pic: candidate.profile_pic || null,
       resumes: candidate.resumes || [],
       supporting_documents: candidate.supporting_documents || [],
+      interviewer_id: candidate.interviewer_id?._id || candidate.interviewer_id || '',
+      interviewDate: candidate.interview_date || '',
+      interviewTime: candidate.interview_time || '',
     }
     setEditingCandidate(cleanedCandidate)
     setIsEditDialogOpen(true)
@@ -271,7 +274,6 @@ const AllCandidates = () => {
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto h-screen">
-      <Toaster />
       <div className="mb-8 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Candidates</h1>

@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect } from 'react'
 import { FiPlus, FiPhone, FiMail, FiUser, FiEdit2, FiTrash2 } from 'react-icons/fi'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { apiFetch } from '@/lib/api'
 import { auth } from '@/lib/firebase'
 
@@ -200,7 +200,7 @@ const VendorPage = () => {
 
     return (
         <div className="p-6 min-h-screen">
-            <Toaster position="top-right" />
+
 
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold text-primary-500 dark:text-primary-100">

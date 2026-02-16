@@ -427,18 +427,6 @@ const RecruiterPage = () => {
         token
       });
 
-      if (firebaseUid) {
-        try {
-          await fetch('/api/deleteUser', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: firebaseUid }),
-          });
-        } catch (e) {
-          console.warn("Failed to delete from Firebase Auth, but deleted from DB", e);
-        }
-      }
-
       toast.success(`Recruiter ${recruiterName} deleted successfully`);
 
       await fetchRecruitersData();
