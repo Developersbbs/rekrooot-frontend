@@ -12,7 +12,7 @@ import { apiFetch } from '@/lib/api'
 import { auth } from '@/lib/firebase'
 
 const AllCandidates = () => {
-  const [candidates, setCandidates] = useState([])
+  const [candidates, setCandidates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -150,6 +150,18 @@ const AllCandidates = () => {
   const handleMoveToTrash = useCallback(async (candidateId) => {
     try {
       if (!auth.currentUser) return
+
+      const candidateToDelete = candidates.find(c => (c._id || c.id) === candidateId);
+      const hasActiveInterview = candidateToDelete?.interview_id && [0, 1].includes(candidateToDelete.interview_id.status);
+
+      const message = hasActiveInterview
+        ? `Are you sure? ${candidateToDelete.full_name} has an active interview scheduled. Deleting this candidate will also CANCEL the interview and notify the candidate.`
+        : `Are you sure you want to move ${candidateToDelete?.full_name || 'this candidate'} to trash?`;
+
+      if (!window.confirm(message)) {
+        return;
+      }
+
       const token = await auth.currentUser.getIdToken()
 
       await apiFetch(`/candidates/${candidateId}`, {
@@ -157,13 +169,14 @@ const AllCandidates = () => {
         token
       })
 
-      fetchCandidatesData()
-      toast.success('Candidate deleted successfully')
+      // Wait a moment for backend to process, then refresh
+      setTimeout(() => {
+        fetchCandidatesData()
+      }, 100)
     } catch (error) {
       console.error('Error deleting candidate:', error)
-      toast.error('Failed to delete candidate')
     }
-  }, [fetchCandidatesData])
+  }, [candidates, fetchCandidatesData])
 
   const handleEdit = useCallback((candidate) => {
     const cleanedCandidate = {
@@ -176,13 +189,14 @@ const AllCandidates = () => {
       vendor_id: candidate.vendor_id?._id || candidate.vendor_id || '',
       client_id: candidate.client_id?._id || candidate.client_id || '',
       job_id: candidate.job_id?._id || candidate.job_id || '',
-      status: candidate.status || 'applied',
+      final_status: candidate.final_status || null,
       profile_pic: candidate.profile_pic || null,
       resumes: candidate.resumes || [],
       supporting_documents: candidate.supporting_documents || [],
-      interviewer_id: candidate.interviewer_id?._id || candidate.interviewer_id || '',
-      interviewDate: candidate.interview_date || '',
-      interviewTime: candidate.interview_time || '',
+      interviewer_id: candidate.interview_id?.interviewer_id?._id || candidate.interview_id?.interviewer_id || '',
+      interviewDate: candidate.interview_id?.date_time ? new Date(candidate.interview_id.date_time).toLocaleDateString() : '',
+      interviewTime: candidate.interview_id?.date_time ? new Date(candidate.interview_id.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+      interviewId: candidate.interview_id?._id || candidate.interview_id || ''
     }
     setEditingCandidate(cleanedCandidate)
     setIsEditDialogOpen(true)
@@ -210,15 +224,107 @@ const AllCandidates = () => {
     }
   }, [editingCandidate, fetchCandidatesData])
 
-  const handleResendEmail = useCallback(async (candidate) => {
-    // TODO: Implement email resend via backend API
-    toast.info('Email resend feature coming soon')
+  const handleResendEmail = useCallback(async (candidate: any) => {
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      if (!token) return
+
+      const candidateId = candidate._id || candidate.id
+      const schedulingLink = `${window.location.origin}/timeslots?candidateId=${candidateId}`
+
+      await apiFetch('/emails/send-interview-slot', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          type: 'invite',
+          candidateEmail: candidate.email,
+          candidateName: candidate.full_name,
+          recruiterEmail: auth.currentUser?.email,
+          vendorEmail: candidate.vendor_id?.email || '',
+          jobTitle: candidate.job_id?.jobTitle || candidate.job_id?.title || '',
+          clientName: candidate.client_id?.name || '',
+          link: schedulingLink
+        })
+      })
+
+      toast.success(`Scheduling link resent to ${candidate.full_name}`)
+    } catch (error) {
+      console.error('Error resending email:', error)
+      toast.error('Failed to resend email')
+    }
   }, [])
 
   const handleCancelMeeting = useCallback(async (candidate) => {
-    // TODO: Implement meeting cancellation via backend API
-    toast.info('Meeting cancellation feature coming soon')
-  }, [])
+    if (!window.confirm(`Are you sure you want to cancel the interview for ${candidate?.full_name}?`)) {
+      return;
+    }
+
+    if (isSubmittingAction) return;
+    setIsSubmittingAction(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const sessionId = candidate.interview_id?.session_id;
+      const meetingLink = candidate.interview_id?.meeting_link;
+      const presenterId = candidate.interview_id?.presenter_id;
+      const zsoid = candidate.interview_id?.zsoid;
+
+      if (sessionId && meetingLink && presenterId) {
+        try {
+          await apiFetch('/meetings/cancel', {
+            method: 'POST',
+            token,
+            body: JSON.stringify({
+              sessionId,
+              presenterId,
+              zsoid
+            })
+          });
+        } catch (cancelError) {
+          console.error('Error cancelling meeting:', cancelError);
+        }
+      }
+
+      await apiFetch(`/candidates/${candidate._id || candidate.id}`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({
+          final_status: null,
+          interview_id: null,
+          status: 5 // 5: cancelled
+        })
+      });
+
+      // Send cancellation email
+      try {
+        await apiFetch('/emails/send-interview-slot', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({
+            type: 'cancel',
+            candidateEmail: candidate.email,
+            candidateName: candidate.full_name,
+            recruiterEmail: auth.currentUser?.email,
+            vendorEmail: candidate.vendor_id?.email || candidate.vendor_id?._id || candidate.vendor_id,
+            jobTitle: candidate.job_id?.jobTitle || candidate.job_id?.title || candidate.job_id,
+            clientName: candidate.client_id?.name || candidate.client_id?._id || candidate.client_id
+          })
+        });
+      } catch (emailErr) {
+        console.error('Error sending cancellation email:', emailErr);
+      }
+
+      toast.success('Interview cancelled successfully');
+      fetchCandidatesData();
+    } catch (error) {
+      console.error('Error cancelling interview:', error);
+      toast.error('Failed to cancel: ' + error.message);
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  }, [fetchCandidatesData, isSubmittingAction])
+
 
   const handleViewProfile = (candidateId) => {
     setSelectedCandidateId(candidateId)
@@ -230,6 +336,46 @@ const AllCandidates = () => {
     setIsRescheduleOpen(true)
   }, [])
 
+  // Derive a display status string from the candidate object
+  const getCandidateDisplayStatus = (candidate: any): string => {
+    // 1. Check for specific result/outcome on the candidate object
+    if (candidate.final_status) return candidate.final_status.toUpperCase();
+    if (candidate.result) return candidate.result.toUpperCase();
+
+    // 2. Use candidate's own status field
+    const candidateStatusMap: { [key: number]: string } = {
+      0: 'WAITING',
+      1: 'SCHEDULED',
+      2: 'RESCHEDULED',
+      3: 'IN REVIEW',
+      4: 'INTERVIEWED',
+      5: 'CANCELLED'
+    };
+
+    if (typeof candidate.status === 'number' && candidateStatusMap[candidate.status] !== undefined) {
+      return candidateStatusMap[candidate.status];
+    }
+
+    // 3. Fallback to interview status (legacy/consistency check)
+    const interviewStatus = candidate.interview_id?.status;
+    const resultStatusMap: { [key: number]: string } = {
+      3: 'SELECTED',
+      4: 'REJECTED',
+      5: 'NO SHOW',
+      6: 'CANCELLED',
+      7: 'PROXY',
+      8: 'TECHNICAL ISSUE'
+    };
+
+    if (typeof interviewStatus === 'number' && resultStatusMap[interviewStatus]) {
+      return resultStatusMap[interviewStatus];
+    }
+
+    // Ultimate fallback
+    if (candidate.interview_id) return 'SCHEDULED';
+    return 'WAITING';
+  };
+
   const filteredCandidates = React.useMemo(() => {
     return candidates.filter(candidate => {
       const searchFields = [
@@ -240,7 +386,8 @@ const AllCandidates = () => {
       const matchesSearch = searchTerm === '' ||
         searchFields.some(field => field.includes(searchTerm.toLowerCase()))
 
-      const matchesStatus = filterStatus === 'all' || candidate.status === filterStatus
+      const displayStatus = getCandidateDisplayStatus(candidate);
+      const matchesStatus = filterStatus === 'all' || displayStatus === filterStatus;
 
       const vendorId = candidate.vendor_id?._id || candidate.vendor_id
       const matchesVendor = filterVendor === 'all' || vendorId === filterVendor
@@ -255,13 +402,20 @@ const AllCandidates = () => {
     })
   }, [candidates, searchTerm, filterStatus, filterVendor, filterClient, filterJob])
 
-  const statusConfig = {
-    "0": { label: 'APPLIED', style: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' },
-    "1": { label: 'WAITING', style: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' },
-    "2": { label: 'SCHEDULED', style: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' },
-    "3": { label: 'SELECTED', style: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' },
-    "4": { label: 'REJECTED', style: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' },
-    "5": { label: 'ON_HOLD', style: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300' },
+
+
+  const statusConfig: { [key: string]: { label: string, style: string } } = {
+    "WAITING": { label: 'WAITING', style: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' },
+    "SCHEDULED": { label: 'SCHEDULED', style: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' },
+    "RESCHEDULED": { label: 'RESCHEDULED', style: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300' },
+    "IN REVIEW": { label: 'IN REVIEW', style: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300' },
+    "INTERVIEWED": { label: 'INTERVIEWED', style: 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-300' },
+    "SELECTED": { label: 'SELECTED', style: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' },
+    "REJECTED": { label: 'REJECTED', style: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' },
+    "NO SHOW": { label: 'NO SHOW', style: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' },
+    "CANCELLED": { label: 'CANCELLED', style: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400' },
+    "PROXY": { label: 'PROXY', style: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300' },
+    "TECHNICAL ISSUE": { label: 'TECHNICAL ISSUE', style: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300' },
   }
 
   if (loading) {
@@ -422,9 +576,15 @@ const AllCandidates = () => {
                   {candidate.location || "N/A"}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusConfig[candidate.status]?.style || 'bg-gray-100 text-gray-800'}`}>
-                    {statusConfig[candidate.status]?.label || candidate.status || 'N/A'}
-                  </span>
+                  {(() => {
+                    const displayStatus = getCandidateDisplayStatus(candidate);
+                    const config = statusConfig[displayStatus] || statusConfig['WAITING'];
+                    return (
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${config.style}`}>
+                        {config.label}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <Menu as="div" className="relative inline-block text-left" key={`menu-${candidate._id}`}>
@@ -450,22 +610,22 @@ const AllCandidates = () => {
                             </button>
                           )}
                         </MenuItem>
-                        {(candidate.status === '1') && (
+                        {getCandidateDisplayStatus(candidate) === 'WAITING' && (
                           <MenuItem>
                             {({ focus }) => (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleResendEmail(candidate); }}
                                 className={`${focus ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'} group flex w-full items-center px-4 py-2 text-sm`}
                               >
-                                <Mail className="mr-3 h-4 w-4 text-primary-500" /> Resend
+                                <Mail className="mr-3 h-4 w-4 text-green-500" /> Resend
                               </button>
                             )}
                           </MenuItem>
                         )}
                       </div>
-                      {(candidate.status === '2' || candidate.status === '4') && (
+                      {(candidate.interview_id || candidate.final_status === 'REJECTED' || candidate.status === 5) && (
                         <div className="py-1">
-                          {candidate.status === '2' && (
+                          {candidate.interview_id && (
                             <MenuItem>
                               {({ focus }) => (
                                 <button

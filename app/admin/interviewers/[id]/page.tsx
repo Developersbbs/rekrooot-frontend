@@ -900,7 +900,7 @@ const InterviewerProfilePage = () => {
         {/* Profile Image */}
         <div className="relative group">
           {interviewer?.photoURL ? (
-            <div className="relative w-40 h-40 rounded-2xl overflow-hidden ring-4 ring-primary-500 ring-offset-4 ring-offset-surface-light dark:ring-offset-gray-800 transition-all duration-300">
+            <div className="relative w-40 h-40 overflow-hidden">
               <Image
                 src={interviewer.photoURL}
                 alt={interviewer.name}
@@ -1147,7 +1147,7 @@ const InterviewerProfilePage = () => {
           {/* Calendar Card */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 transition-all hover:shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-white">
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text dark:text-white text-black">
                 Select Date
               </h2>
             </div>
@@ -1164,7 +1164,7 @@ const InterviewerProfilePage = () => {
           {/* Timeslots Card */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 transition-all hover:shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text text-white">
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-primary-600 to-primary-400 dark:from-primary-400 dark:to-primary-200 bg-clip-text dark:text-white text-black">
                 Available Time Slots
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">

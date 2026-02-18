@@ -20,8 +20,9 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
     useEffect(() => {
         if (isOpen) {
             fetchInterviewers();
-            if (candidate?.interviewerId) {
-                const currentInterviewer = interviewers.find(i => i.id === candidate.interviewerId);
+            const interviewerId = candidate?.interview_id?.interviewer_id?._id || candidate?.interview_id?.interviewer_id;
+            if (interviewerId) {
+                const currentInterviewer = interviewers.find(i => (i._id || i.id) === interviewerId);
                 if (currentInterviewer) {
                     setSelectedInterviewer(currentInterviewer);
                     setInterviewerSearchTerm(currentInterviewer.name || currentInterviewer.email);
@@ -31,8 +32,9 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
     }, [isOpen, candidate]);
 
     useEffect(() => {
-        if (selectedInterviewer) {
-            fetchAvailableSlots(selectedInterviewer.id);
+        const intId = selectedInterviewer?._id || selectedInterviewer?.id;
+        if (intId) {
+            fetchAvailableSlots(intId);
         }
     }, [selectedInterviewer]);
 
@@ -45,8 +47,9 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
             const interviewersData = data.interviewers || [];
             setInterviewers(interviewersData);
 
-            if (candidate?.interviewerId) {
-                const current = interviewersData.find(i => i._id === candidate.interviewerId);
+            const interviewerId = candidate?.interview_id?.interviewer_id?._id || candidate?.interview_id?.interviewer_id;
+            if (interviewerId) {
+                const current = interviewersData.find(i => (i._id || i.id) === interviewerId);
                 if (current) {
                     setSelectedInterviewer(current);
                     setInterviewerSearchTerm(current.name || current.email);
@@ -98,18 +101,26 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
             if (!token) return;
 
             // 1. Cancel previous Zoho meeting if it exists via server
-            if (candidate.sessionId && candidate.meetingLink) {
+            const sessionId = candidate.interview_id?.session_id;
+            const meetingLink = candidate.interview_id?.meeting_link;
+            const presenterId = candidate.interview_id?.presenter_id;
+
+            const zsoid = candidate.interview_id?.zsoid;
+
+            if (sessionId && meetingLink && presenterId) {
                 try {
+                    console.log('Attempting to cancel meeting:', { sessionId, presenterId, zsoid });
                     await apiFetch('/meetings/cancel', {
                         method: 'POST',
                         token,
                         body: JSON.stringify({
-                            sessionId: candidate.sessionId,
-                            presenterId: candidate.presenterId
+                            sessionId: sessionId,
+                            presenterId: presenterId,
+                            zsoid: zsoid
                         })
                     });
                 } catch (cancelError) {
-                    console.error('Error cancelling previous meeting via server:', cancelError);
+                    console.error('Error cancelling previous meeting:', cancelError.response?.data || cancelError.message);
                 }
             }
 
@@ -120,7 +131,7 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
             // We should use a server endpoint for rescheduling if possible.
 
             // 3. Create new Zoho meeting via server
-            let newMeeting = { sessionId: null, meetingLink: null, zsoid: null };
+            let meetData = null;
             try {
                 const [hours, minutes] = selectedSlot.time24.split(':');
                 const mDate = new Date(selectedSlot.date);
@@ -141,40 +152,35 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                     candidateId: candidate._id || candidate.id
                 };
 
-                const meetData = await apiFetch('/meetings/create', {
+                meetData = await apiFetch('/meetings/create', {
                     method: 'POST',
                     token,
                     body: JSON.stringify(meetPayload)
                 });
-
-                if (meetData.session) {
-                    newMeeting.sessionId = meetData.session.meetingKey || meetData.session.sys_id || meetData.session.id;
-                    newMeeting.meetingLink = meetData.session.joinLink || meetData.session.join_url;
-                    newMeeting.zsoid = meetData.session.zsoid;
-                }
             } catch (meetErr) {
                 console.error('Error creating rescheduled meeting:', meetErr);
+                toast.error('Failed to create new meeting');
+                return;
             }
 
-            // 4. Update candidate record and interviewer schedule via server
-            // We'll use confirm-slot endpoint which handles both
+            if (!meetData || !meetData.interviewId) {
+                toast.error('Failed to create interview record');
+                return;
+            }
+
             await apiFetch(`/candidates/${candidate._id || candidate.id}/confirm-slot`, {
                 method: 'POST',
                 token,
                 body: JSON.stringify({
+                    interviewId: meetData.interviewId,
                     interviewDate: selectedSlot.date,
                     interviewTime: selectedSlot.time,
-                    interviewerId: selectedInterviewer._id || selectedInterviewer.id,
-                    meetingLink: newMeeting.meetingLink,
-                    sessionId: newMeeting.sessionId,
-                    presenterId: selectedInterviewer.zoho_meet_uid || '60058686791',
-                    zsoid: newMeeting.zsoid
+                    interviewerId: selectedInterviewer._id || selectedInterviewer.id
                 })
             });
 
-            // 5. Send Rescheduling confirmation email via server
             try {
-                // Fetch full candidate data to get job/client/owner details if needed
+
                 const fullCandidate = await apiFetch(`/candidates/${candidate._id || candidate.id}`, { token });
                 const c = fullCandidate.candidate;
 
@@ -191,7 +197,7 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                         interviewerName: selectedInterviewer.name,
                         selectedTimeSlot: `${selectedSlot.date} at ${selectedSlot.time}`,
                         sendDirectInvitation: true,
-                        link: newMeeting.meetingLink
+                        link: meetData.session?.joinLink || meetData.session?.join_url || meetData.session?.meetingLink || meetData.session?.url
                     })
                 });
             } catch (emailErr) {
@@ -222,14 +228,21 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
             if (!token) return;
 
             // 1. Cancel Zoho meeting if it exists via server
-            if (candidate.sessionId && candidate.meetingLink) {
+            const sessionId = candidate.interview_id?.session_id;
+            const meetingLink = candidate.interview_id?.meeting_link;
+            const presenterId = candidate.interview_id?.presenter_id;
+
+            const zsoid = candidate.interview_id?.zsoid;
+
+            if (sessionId && meetingLink && presenterId) {
                 try {
                     await apiFetch('/meetings/cancel', {
                         method: 'POST',
                         token,
                         body: JSON.stringify({
-                            sessionId: candidate.sessionId,
-                            presenterId: candidate.presenterId
+                            sessionId: sessionId,
+                            presenterId: presenterId,
+                            zsoid: zsoid
                         })
                     });
                 } catch (cancelError) {
@@ -246,14 +259,9 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                 method: 'PUT',
                 token,
                 body: JSON.stringify({
-                    status: '4', // Rejected/Cancelled
-                    meetingLink: null,
-                    sessionId: null,
-                    interviewDate: null,
-                    interviewTime: null,
-                    interviewerId: null,
-                    zsoid: null,
-                    presenterId: null
+                    final_status: null,
+                    is_active: true,
+                    interview_id: null
                 })
             });
 
@@ -338,7 +346,7 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                                     <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-40 overflow-y-auto">
                                         {filteredInterviewers.map(i => (
                                             <div
-                                                key={i.id}
+                                                key={i._id || i.id}
                                                 onClick={() => handleInterviewerSelect(i)}
                                                 className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm"
                                             >
@@ -365,7 +373,7 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                                                 const isSelected = selectedSlot?.date === slot.date && selectedSlot?.time === slot.time;
                                                 return (
                                                     <div
-                                                        key={idx}
+                                                        key={`${slot.date}-${slot.time}-${idx}`}
                                                         onClick={() => setSelectedSlot(slot)}
                                                         className={`p-2 rounded-md cursor-pointer border text-sm transition-colors ${isSelected
                                                             ? 'bg-blue-500 border-blue-500 text-white'
@@ -396,13 +404,6 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
 
                     <div className="mt-8 flex flex-col gap-3">
                         <div className="flex justify-end space-x-3">
-                            <button
-                                onClick={handleCancelOnly}
-                                disabled={isSubmitting}
-                                className="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-white dark:bg-gray-800 border border-red-300 dark:border-red-900 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                            >
-                                Cancel Interview Only
-                            </button>
                             <button
                                 onClick={onClose}
                                 disabled={isSubmitting}

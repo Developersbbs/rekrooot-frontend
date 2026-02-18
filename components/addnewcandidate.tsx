@@ -80,19 +80,24 @@ const AddNewCandidate = ({
     interviewerId: '',
     resume: [],
     supportingDocuments: [],
-    status: '0',
     experience: '',
-    trash: false
+    trash: false,
+    final_status: null,
+    is_active: true
   })
 
 
   useEffect(() => {
     if (formData.clientId) {
-      const jobsForClient = jobs.filter(job => job.clientId === formData.clientId)
-      setFilteredJobs(jobsForClient)
+      const jobsForClient = jobs.filter(job => job.clientId === formData.clientId);
+      // Filter to show only active jobs
+      const activeJobsForClient = jobsForClient.filter(job => job.status === '0');
+      setFilteredJobs(activeJobsForClient);
       setFormData(prev => ({ ...prev, jobId: '' }))
     } else {
-      setFilteredJobs([])
+      // Filter to show only active jobs when no client is selected
+      const activeJobs = jobs.filter(job => job.status === '0');
+      setFilteredJobs(activeJobs);
     }
   }, [formData.clientId, jobs])
 
@@ -128,9 +133,26 @@ const AddNewCandidate = ({
 
       // Update filtered jobs if there's a selected client or prefilled job
       const clientId = selectedJob?.clientId || prefilledJobData?.clientId || formData.clientId;
+      console.log('Job filtering debug:', {
+        clientId,
+        selectedJobStatus: selectedJob?.status,
+        prefilledJobStatus: prefilledJobData?.status,
+        totalJobs: mappedJobs.length,
+        mappedJobsSample: mappedJobs.slice(0, 3).map(j => ({ id: j.id, status: j.status, title: j.title || j.jobTitle }))
+      });
+      
       if (clientId) {
         const jobsForClient = mappedJobs.filter(job => job.clientId === clientId);
-        setFilteredJobs(jobsForClient);
+        // Filter to show only active jobs
+        const activeJobsForClient = jobsForClient.filter(job => job.status === '0');
+        console.log('Client filtering:', { clientId, jobsForClient: jobsForClient.length, activeJobsForClient: activeJobsForClient.length });
+        setFilteredJobs(activeJobsForClient);
+        setFormData(prev => ({ ...prev, jobId: '' }))
+      } else {
+        // Filter to show only active jobs when no client is selected
+        const activeJobs = mappedJobs.filter(job => job.status === '0');
+        console.log('No client filtering:', { activeJobs: activeJobs.length });
+        setFilteredJobs(activeJobs);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -468,11 +490,13 @@ const AddNewCandidate = ({
         primary_contact: formData.primaryContact,
         secondary_contact: formData.secondaryContact,
         experience_years: formData.experience,
-        status: formData.status,
+        final_status: formData.final_status || null,
+        is_active: formData.is_active ?? true,
         profile_pic: profilePicUrl,
         resumes: uploadedResumes,
         supporting_documents: uploadedSupportingDocs,
-        trash: formData.trash
+        trash: formData.trash,
+        interview_id: formData.interviewId || null
       };
 
       // Update the candidate via API
@@ -631,13 +655,12 @@ const AddNewCandidate = ({
         primary_contact: formData.primaryContact,
         secondary_contact: formData.secondaryContact,
         experience_years: formData.experience,
-        status: selectedTimeSlot ? '2' : '1',
+        final_status: null,
+        is_active: true,
         profile_pic: profilePicUrl,
         resumes: uploadedResumes,
         supporting_documents: uploadedSupportingDocs,
-        company_id: companyId,
-        interviewer_id: finalInterviewerId,
-        presenterId: interviewerData?.zoho_meet_uid || '60058686791'
+        company_id: companyId
       };
 
       const res = await apiFetch('/candidates', {
@@ -652,30 +675,8 @@ const AddNewCandidate = ({
       if (!newCandidate) throw new Error('Failed to create candidate');
 
       if (finalInterviewerId && newCandidate._id && interviewerData) {
-        try {
-          if (selectedSlotData) {
-            const updatedSlots = { ...interviewerData.availability_slots };
-            if (!updatedSlots[selectedSlotData.date]) updatedSlots[selectedSlotData.date] = {};
-            updatedSlots[selectedSlotData.date][selectedSlotData.time] = newCandidate._id;
+        // Redundant interviewer availability updates removed (now handled by meeting/create)
 
-            const existingAssigned = Array.isArray(interviewerData.assigned_candidates)
-              ? interviewerData.assigned_candidates.map(c => typeof c === 'object' ? c._id : c)
-              : [];
-
-            const updatedCandidates = Array.from(new Set([...existingAssigned, newCandidate._id]));
-
-            await apiFetch(`/interviewers/${finalInterviewerId}`, {
-              method: 'PUT',
-              token,
-              body: JSON.stringify({
-                availability_slots: updatedSlots,
-                assigned_candidates: updatedCandidates
-              })
-            });
-          }
-        } catch (updateError) {
-          console.error('Error updating interviewer availability:', updateError);
-        }
 
         const jobData = jobs.find(j => j.id === formData.jobId);
         const clientData = clients.find(c => c.id === formData.clientId);
@@ -894,7 +895,8 @@ const AddNewCandidate = ({
         jobId: candidateData.job_id || '',
         clientId: candidateData.client_id || '',
         interviewerId: candidateData.interviewer_id || '',
-        status: candidateData.status || '0',
+        final_status: candidateData.final_status ?? null,
+        is_active: candidateData.is_active ?? true,
         experience: candidateData.experience_years || ''
       });
 
@@ -955,7 +957,9 @@ const AddNewCandidate = ({
 
       if (jobs.length > 0) {
         const jobsForClient = jobs.filter(job => job.clientId === jobToUse.clientId);
-        setFilteredJobs(jobsForClient);
+        // Filter to show only active jobs
+        const activeJobsForClient = jobsForClient.filter(job => job.status === '0');
+        setFilteredJobs(activeJobsForClient);
       }
     }
   }, [prefilledJobData, selectedJob, clients, jobs]);

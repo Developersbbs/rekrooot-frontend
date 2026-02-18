@@ -16,13 +16,12 @@ type StatState = {
   totalVendors: number;
   appliedCandidates: number;
   selectedCandidates: number;
-  rejectedCandidates: number;
 };
 
 type MonthlyTrend = {
   month: string;
   interviews: number;
-  hired: number;
+  selected: number;
 };
 
 type CandidateStatusDatum = {
@@ -38,12 +37,12 @@ type InterviewRow = {
   jobName: string;
   clientName: string;
   vendorName: string;
-  dateISO: string; // ISO date string
-  status: 'pending' | 'completed';
+  dateISO: string;
+  status: string;
 };
 
 function DashboardPage() {
-  const [filterDate, setFilterDate] = useState<'today' | 'tomorrow'>('today');
+  const [filterDate, setFilterDate] = useState<'all' | 'today' | 'tomorrow'>('all');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<StatState>({
     totalJobs: 0,
@@ -51,7 +50,6 @@ function DashboardPage() {
     totalVendors: 0,
     appliedCandidates: 0,
     selectedCandidates: 0,
-    rejectedCandidates: 0,
   });
 
   const [monthlyTrends, setMonthlyTrends] = useState<MonthlyTrend[]>([]);
@@ -125,6 +123,8 @@ function DashboardPage() {
   }, []);
 
   const filteredInterviews = useMemo(() => {
+    if (filterDate === 'all') return interviews;
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -143,7 +143,7 @@ function DashboardPage() {
     return monthlyTrends;
   }, [monthlyTrends]);
 
-  const COLORS = ['#2f4858', '#fb8404', '#64748b', '#cbd5e1'];
+  const COLORS = ['#2f4858', '#fb8404', '#64748b', '#cbd5e1', '#ef4444'];
 
   const fadeInUp = {
     initial: { opacity: 0, y: 20 },
@@ -165,15 +165,13 @@ function DashboardPage() {
         Dashboard
       </motion.h1>
 
-      {/* Stats Counter Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-5 gap-6 mb-8">
         {[
           { title: 'Total Jobs', value: stats.totalJobs, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
           { title: "Total Clients", value: stats.totalClients, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
           { title: "Total Vendors", value: stats.totalVendors, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          { title: 'Applied Candidates', value: stats.appliedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          { title: 'Selected Candidates', value: stats.selectedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
-          { title: 'Rejected Candidates', value: stats.rejectedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' }
+          { title: 'Total Candidates', value: stats.appliedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
+          { title: 'Interviewed Candidates', value: stats.selectedCandidates, bgColor: 'bg-primary-50 dark:bg-primary-900/30', textColor: 'text-primary-700 dark:text-primary-300' },
         ].map((stat, index) => (
           <motion.div
             key={stat.title}
@@ -203,7 +201,7 @@ function DashboardPage() {
             <span className="w-2 h-6 bg-primary-500 rounded-full mr-3"></span>
             Monthly Interview Trends
           </h2>
-          <div className="h-[300px] [&_.recharts-wrapper]:!w-full [&_.recharts-surface]:!w-full">
+          <div className="w-full h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyData}>
                 <CartesianGrid
@@ -258,7 +256,7 @@ function DashboardPage() {
                   height={36}
                   formatter={(value: string) => (
                     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {value}
+                      {value.charAt(0).toUpperCase() + value.slice(1)}
                     </span>
                   )}
                 />
@@ -281,7 +279,7 @@ function DashboardPage() {
                 />
                 <Line
                   type="monotone"
-                  dataKey="hired"
+                  dataKey="selected"
                   stroke="#fb8404"
                   strokeWidth={2}
                   dot={{
@@ -310,7 +308,7 @@ function DashboardPage() {
             <span className="w-2 h-6 bg-accent-500 rounded-full mr-3"></span>
             Candidate Status Distribution
           </h2>
-          <div className="h-[300px]">
+          <div className="w-full h-[300px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -322,12 +320,6 @@ function DashboardPage() {
                   fill="#8884d8"
                   paddingAngle={5}
                   dataKey="value"
-                  label={(props: { name?: string; percent?: number }) => {
-                    const name = props.name ?? ''
-                    const percent = props.percent ?? 0
-                    return `${name} ${(percent * 100).toFixed(0)}%`
-                  }}
-                  labelLine={{ stroke: 'currentColor', strokeWidth: 0.5 }}
                 >
                   {candidateStatusData.map((entry, index) => (
                     <Cell
@@ -372,6 +364,15 @@ function DashboardPage() {
             Recent Interviews
           </h2>
           <div className="flex gap-2">
+            <button
+              onClick={() => setFilterDate('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filterDate === 'all'
+                ? 'bg-primary-500 text-white'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+            >
+              All
+            </button>
             <button
               onClick={() => setFilterDate('today')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filterDate === 'today'
@@ -432,9 +433,12 @@ function DashboardPage() {
                       {new Date(interview.dateISO).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${interview.status === 'completed'
-                        ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                        : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                      <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${interview.status === 'Selected' ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                        : interview.status === 'Rejected' ? 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                          : interview.status === 'Cancelled' ? 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
+                            : interview.status === 'No Show' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
+                              : interview.status === 'In Review' ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200'
+                                : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
                         }`}>
                         {interview.status}
                       </span>
@@ -443,7 +447,7 @@ function DashboardPage() {
                 ))
               ) : (
                 <tr>
-                  <td className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
+                  <td colSpan={8} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                     No interviews found for the selected period
                   </td>
                 </tr>

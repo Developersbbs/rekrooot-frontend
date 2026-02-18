@@ -104,12 +104,13 @@ const TimeslotsPageContent = () => {
         });
 
         // Check/Set existing interview status
-        if (candidate.interview_date && candidate.interview_time) {
-          const formattedDate = format(new Date(candidate.interview_date), 'MMMM d, yyyy');
+        if (candidate.interview_id) {
+          const iv = candidate.interview_id;
+          const formattedDate = format(new Date(iv.date_time), 'MMMM d, yyyy');
           setMeetingDetails({
             date: formattedDate,
-            time: candidate.interview_time,
-            meetingLink: candidate.meeting_link,
+            time: format(new Date(iv.date_time), 'hh:mm a'),
+            meetingLink: iv.meeting_link,
             isExisting: true // Mark as existing to show the "Already Scheduled" dialog
           });
         }
@@ -249,27 +250,6 @@ const TimeslotsPageContent = () => {
 
       const { meetingLink, sessionId, presenterId, zsoid } = meetingResult;
 
-      // Update candidate (and interviewer availability via backend hook)
-      const confirmResponse = await fetch(`${API_BASE_URL}/candidates/${candidateId}/confirm-slot`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          interviewDate: selectedDate.toDateString(),
-          interviewTime: selectedSlot,
-          interviewerId: slotData.interviewerId,
-          meetingLink,
-          sessionId,
-          presenterId,
-          zsoid
-        })
-      });
-
-      if (!confirmResponse.ok) {
-        throw new Error('Failed to confirm slot in database');
-      }
-
       // Set meeting details for popup
       const interviewer = interviewers.find(i => i.id === slotData.interviewerId);
       setMeetingDetails({
@@ -368,8 +348,9 @@ const TimeslotsPageContent = () => {
           meetData.session.id;
 
         const zsoid = meetData.session.zsoid || meetData.session.meeting?.zsoid || null;
+        const interviewId = meetData.interviewId;
 
-        return { meetingLink, sessionId, presenterId, zsoid };
+        return { meetingLink, sessionId, presenterId, zsoid, interviewId };
       }
       return null;
 
@@ -491,16 +472,12 @@ const TimeslotsPageContent = () => {
         {/* Time Slots */}
         <div className="bg-surface-light dark:bg-surface-dark rounded-2xl p-4 sm:p-6 shadow-lg mb-16 sm:mb-20">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-            <h2 className="text-lg sm:text-xl font-semibold text-primary-500 dark:text-primary-300">
+            <h2 className="text-lg sm:text-xl font-semibold text-primary-500 dark:text-primary-500">
               Available Time Slots
             </h2>
             <div className="flex items-center sm:items-end gap-2 text-gray-500">
               <span className="text-sm font-medium">
                 {format(selectedDate, 'MMMM d, yyyy')}
-              </span>
-              <span className="hidden sm:inline text-gray-400">•</span>
-              <span className="text-xs text-gray-400">
-                Your local timezone
               </span>
             </div>
           </div>

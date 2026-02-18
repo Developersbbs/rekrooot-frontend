@@ -41,10 +41,9 @@ const JobsPage = () => {
   })
 
   const jobStatusConfig = {
-    '0': { label: 'TRASH', style: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
+    '0': { label: 'ACTIVE', style: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
     '1': { label: 'INACTIVE', style: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200' },
     '2': { label: 'ONHOLD', style: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200' },
-    '3': { label: 'ACTIVE', style: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' },
   };
 
   const [newJob, setNewJob] = useState({
@@ -55,7 +54,7 @@ const JobsPage = () => {
     jobCategory: 'Hybrid',
     jobType: 'Full Time',
     description: '',
-    status: '3',
+    status: '0',
     requiredSkills: [],
     createdAt: new Date(),
     candidateCounts: {
@@ -320,6 +319,8 @@ const JobsPage = () => {
           jobCategory: res.job.category,
           jobType: res.job.type,
           requiredSkills: res.job.technologies ? res.job.technologies.map(t => typeof t === 'object' ? t.name : t) : [],
+          clientId: res.job.client_id?._id || res.job.client_id,
+          clientName: res.job.client_id?.name,
           candidateCounts: res.job.candidate_counts || {
             waiting: 0,
             scheduled: 0,
@@ -329,7 +330,8 @@ const JobsPage = () => {
             cancelled: 0,
             technicalIssue: 0,
             proxy: 0,
-            onHold: 0
+            onHold: 0,
+            applied: 0
           }
         }, ...prev])
 
@@ -392,6 +394,8 @@ const JobsPage = () => {
             jobCategory: res.job.category,
             jobType: res.job.type,
             requiredSkills: res.job.technologies ? res.job.technologies.map(t => typeof t === 'object' ? t.name : t) : [],
+            clientId: res.job.client_id?._id || res.job.client_id,
+            clientName: res.job.client_id?.name,
             candidateCounts: res.job.candidate_counts || job.candidateCounts
           } : job
         ))
@@ -473,12 +477,20 @@ const JobsPage = () => {
   // Dropdown handling functions
   const handleStatusButtonClick = (e, jobId) => {
     const rect = e.target.getBoundingClientRect()
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
+    
+    // Calculate position to center the dropdown below the button
+    const dropdownWidth = 120 // Approximate width of dropdown
+    const buttonCenter = rect.left + rect.width / 2
+    const dropdownLeft = buttonCenter - dropdownWidth / 2
+    
     setStatusDropdown({
       isOpen: true,
       jobId,
       position: {
-        x: rect.left,
-        y: rect.bottom + window.scrollY
+        x: dropdownLeft,
+        y: rect.bottom + scrollTop
       }
     })
   }
@@ -498,7 +510,7 @@ const JobsPage = () => {
     const userData = userDataCookie ? JSON.parse(userDataCookie) : null;
 
     if (userData?.role === 'SuperAdmin' && (!selectedCompanyId || selectedCompanyId === 'all')) {
-      toast.error('Please select a company before adding a candidate');
+      showAlert('Please select a company before adding a candidate', 'error');
       return;
     }
 
@@ -520,7 +532,7 @@ const JobsPage = () => {
       jobCategory: 'Hybrid',
       jobType: 'Full Time',
       description: '',
-      status: '3',
+      status: '0',
       requiredSkills: [],
       createdAt: new Date(),
       candidateCounts: {
@@ -541,12 +553,18 @@ const JobsPage = () => {
   };
 
   const handleApply = (job) => {
+    // Check if job is active
+    if (job.status !== '0') {
+      showAlert('Cannot apply for inactive jobs', 'error');
+      return;
+    }
+
     // Check if SuperAdmin has selected a company
     const userDataCookie = Cookies.get('userData');
     const userData = userDataCookie ? JSON.parse(userDataCookie) : null;
 
     if (userData?.role === 'SuperAdmin' && (!selectedCompanyId || selectedCompanyId === 'all')) {
-      toast.error('Please select a company before adding a candidate');
+      showAlert('Please select a company to apply for this job', 'error');
       return;
     }
 
@@ -599,7 +617,6 @@ const JobsPage = () => {
               <option value="3">Active</option>
               <option value="2">On Hold</option>
               <option value="1">Inactive</option>
-              <option value="0">Trash</option>
             </select>
             <FiChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none" />
           </div>
@@ -652,6 +669,7 @@ const JobsPage = () => {
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Total</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Waiting</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Scheduled</th>
+                  <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Interview In Review</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Selected</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Rejected</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">No Show</th>
@@ -659,6 +677,7 @@ const JobsPage = () => {
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Tech Issue</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Proxy</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">On Hold</th>
+                  
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Created</th>
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Status</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Actions</th>
@@ -687,19 +706,25 @@ const JobsPage = () => {
                       <td className="px-4 py-4 text-center">
                         <button
                           onClick={() => handleApply(job)}
-                          className="inline-flex items-center justify-center p-2 rounded-full text-primary-600 hover:text-white hover:bg-primary-500 dark:text-primary-400 dark:hover:text-white dark:hover:bg-primary-600 transition-all duration-200"
+                          disabled={job.status !== '0'}
+                          title={job.status !== '0' ? 'Cannot apply for inactive jobs' : ''}
+                          className={`inline-flex items-center justify-center p-2 rounded-full transition-all duration-200
+                            ${job.status === '0' 
+                              ? 'text-primary-600 hover:text-white hover:bg-primary-500 dark:text-primary-400 dark:hover:text-white dark:hover:bg-primary-600' 
+                              : 'text-gray-400 cursor-not-allowed opacity-50'}`}
                         >
                           <FiUserPlus className="w-5 h-5" />
                         </button>
                       </td>
                       {/* Candidate Status Columns */}
-                      {['total', 'waiting', 'scheduled', 'selected', 'rejected', 'noShow', 'cancelled', 'technicalIssue', 'proxy', 'onHold'].map((status) => (
+                      {['total', 'waiting', 'scheduled', 'interviewInReview', 'selected', 'rejected', 'noShow', 'cancelled', 'technicalIssue', 'proxy', 'onHold'].map((status) => (
                         <td key={status} className="px-4 py-4 text-center">
                           <span className={`inline-flex items-center justify-center min-w-[32px] px-2.5 py-1 rounded-full text-xs font-medium
                             ${status === 'total' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200' :
                               status === 'waiting' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200' :
                                 status === 'scheduled' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200' :
-                                  status === 'selected' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' :
+                                  status === 'interviewInReview' ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200' :
+                                    status === 'selected' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' :
                                     status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200' :
                                       status === 'noShow' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200' :
                                         status === 'cancelled' ? 'bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-200' :
@@ -1173,14 +1198,13 @@ const JobsPage = () => {
                       Status
                     </label>
                     <select
-                      value={editingJob?.status || '3'}
+                      value={editingJob?.status || '0'}
                       onChange={(e) => setEditingJob(prev => ({ ...prev, status: e.target.value }))}
                       className="w-full rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/20 transition-all"
                     >
-                      <option value="3">Active</option>
+                      <option value="0">Active</option>
                       <option value="1">Inactive</option>
                       <option value="2">On Hold</option>
-                      <option value="0">Trash</option>
                     </select>
                   </div>
                 </div>
@@ -1330,29 +1354,36 @@ const JobsPage = () => {
         }}
       />
 
-      {/* External Status Dropdown */}
+      {/* Status Dropdown - Fixed positioning to break out of table */}
       {statusDropdown.isOpen && (
         <div
-          className="fixed bg-white dark:bg-gray-800 rounded-lg shadow-lg ring-1 ring-black ring-opacity-5 border border-gray-200 dark:border-gray-700 z-[9999]"
+          className="fixed bg-white dark:bg-gray-800 rounded-lg shadow-xl ring-1 ring-black ring-opacity-5 border border-gray-200 dark:border-gray-700 z-[9999] min-w-[120px] overflow-hidden"
           style={{
             left: `${statusDropdown.position.x}px`,
             top: `${statusDropdown.position.y}px`
           }}
         >
           <div className="py-1">
-            {['3', '2', '1', '0'].map((status) => {
+            {['0', '1', '2'].map((status) => {
               const job = jobs.find(j => j.id === statusDropdown.jobId);
               return (
                 <button
                   key={status}
                   onClick={() => handleStatusSelect(statusDropdown.jobId, status)}
-                  className={`w-full text-left px-4 py-2 text-sm transition-colors duration-200
+                  className={`w-full text-left px-4 py-2.5 text-sm font-medium transition-colors duration-200 block
                     ${job?.status === status ?
-                      'bg-primary-50 text-primary-600 dark:bg-primary-900/20' :
-                      'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                      'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' :
+                      'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                   disabled={job?.status === status || isStatusUpdating === statusDropdown.jobId}
                 >
-                  {jobStatusConfig[status]?.label || status}
+                  <div className="flex items-center justify-between">
+                    <span>{jobStatusConfig[status]?.label || status}</span>
+                    {job?.status === status && (
+                      <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    )}
+                  </div>
                 </button>
               )
             })}

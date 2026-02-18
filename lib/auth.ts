@@ -1,4 +1,4 @@
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "./firebase";
 import { apiFetch, ApiError } from "./api";
 
@@ -68,4 +68,8 @@ export async function logout() {
 
 export function isNotProvisionedError(err: unknown) {
   return err instanceof ApiError && err.status === 403;
+}
+
+export async function forgotPassword(email: string) {
+  await sendPasswordResetEmail(auth, email);
 }

@@ -13,6 +13,12 @@ type Vendor = {
     status: string
     company_id: string
     createdAt?: string
+    createdBy?: {
+        _id: string
+      username: string
+        email: string
+    }
+    candidateCount?: number
 }
 
 const VendorPage = () => {
@@ -235,10 +241,15 @@ const VendorPage = () => {
                             </div>
 
                             <div className="flex flex-col">
-                                <div className="mb-6">
+                                <div className="mb-4">
                                     <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 group-hover:text-accent-500 transition-colors">
                                         {vendor.vendorName}
                                     </h3>
+                                    {vendor.createdBy && (
+                                        <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                            Added by {vendor.createdBy.username}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-3">
@@ -252,19 +263,25 @@ const VendorPage = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end items-center mt-6 pt-4 border-t border-gray-100 dark:border-gray-700 gap-2">
-                                    <button
-                                        onClick={() => handleEdit(vendor)}
-                                        className="p-2 text-gray-500 hover:text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/20 rounded-lg transition-colors"
-                                    >
-                                        <FiEdit2 size={18} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(vendor.id)}
-                                        className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                    >
-                                        <FiTrash2 size={18} />
-                                    </button>
+                                <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                    <div className="flex items-center gap-2 text-sm p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                                        <span className="text-blue-700 dark:text-blue-300 font-bold">{vendor.candidateCount || 0}</span>
+                                        <span className="text-blue-600 dark:text-blue-400 font-medium">Candidates</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleEdit(vendor)}
+                                            className="p-2 text-gray-500 hover:text-accent-500 hover:bg-accent-50 dark:hover:bg-accent-900/20 rounded-lg transition-colors"
+                                        >
+                                            <FiEdit2 size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(vendor.id)}
+                                            className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                        >
+                                            <FiTrash2 size={18} />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -10,7 +10,7 @@ import { Label } from "../components/ui/label";
 import { Button } from "../components/ui/button";
 import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
-import { isNotProvisionedError, loginWithEmailPasswordStrict } from "@/lib/auth";
+import { isNotProvisionedError, loginWithEmailPasswordStrict, forgotPassword } from "@/lib/auth";
 
 
 export default function Home() {
@@ -24,6 +24,7 @@ export default function Home() {
   const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
 
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function Home() {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setResetMessage("");
 
     try {
       const { user } = await loginWithEmailPasswordStrict(email, password);
@@ -86,6 +88,25 @@ export default function Home() {
     }
   }
 
+  async function handleForgotPassword() {
+    if (!email) {
+      setError("Please enter your email address first.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setResetMessage("");
+
+    try {
+      await forgotPassword(email);
+      setResetMessage("Password reset email sent! Please check your inbox.");
+    } catch (err: any) {
+      setError(err?.message || "Failed to send reset email");
+    } finally {
+      setLoading(false);
+    }
+  }
+
 
   return (
     <div
@@ -95,7 +116,6 @@ export default function Home() {
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
         backgroundSize: "cover",
-        backgroundColor: "",
       }}
       className="w-full h-screen relative flex items-center justify-center px-4"
     >
@@ -127,7 +147,7 @@ export default function Home() {
               <Input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="Enter your email"
                 autoComplete="email"
                 required
                 value={email}
@@ -139,7 +159,9 @@ export default function Home() {
                 <Label htmlFor="password">Password</Label>
                 <button
                   type="button"
-                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={handleForgotPassword}
+                  disabled={loading}
+                  className="text-xs font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Forgot password?
                 </button>
@@ -148,7 +170,7 @@ export default function Home() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   autoComplete="current-password"
                   required
                   className="pr-10"
@@ -167,6 +189,9 @@ export default function Home() {
             </div>
             {error ? (
               <div className="text-sm text-destructive">{error}</div>
+            ) : null}
+            {resetMessage ? (
+              <div className="text-sm text-green-500">{resetMessage}</div>
             ) : null}
             <Button type="submit" className="w-full mt-2" disabled={loading}>
               {loading ? "Logging in..." : "Log in"}

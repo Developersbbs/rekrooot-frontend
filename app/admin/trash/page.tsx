@@ -1,123 +1,102 @@
 'use client'
 import React, { useState, useEffect } from 'react'
-import { collection, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore'
-import { db } from '@/config/firebase.config'
-import { FiSearch, FiTrash2, FiEdit2, FiEye, FiRefreshCw } from 'react-icons/fi'
+import { auth } from '@/lib/firebase'
+import { apiFetch } from '@/lib/api'
+import { FiSearch, FiTrash2, FiEye, FiRefreshCw } from 'react-icons/fi'
 import Image from 'next/image'
-import { Toaster , toast} from 'react-hot-toast'
+import { Toaster, toast } from 'react-hot-toast'
 import CandidateProfile from '@/components/candidateprofile'
 
 const TrashPage = () => {
-  const [candidates, setCandidates] = useState([])
+  const [candidates, setCandidates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [vendors, setVendors] = useState({})
-  const [jobs, setJobs] = useState({})
-  const [clients, setClients] = useState({})
   const [isProfileOpen, setIsProfileOpen] = useState(false)
-  const [selectedCandidateId, setSelectedCandidateId] = useState(null)
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null)
 
   const fetchCandidatesData = async () => {
     try {
-      const candidatesSnap = await getDocs(collection(db, 'candidates'))
-      const candidatesData = candidatesSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate()
-      }))
-      // Only show candidates that are in trash
-      setCandidates(candidatesData.filter(candidate => candidate.trash))
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      const res: any = await apiFetch('/candidates?trash=true', { token })
+      if (res?.candidates) {
+        setCandidates(res.candidates)
+      }
     } catch (error) {
-      console.error('Error fetching candidates:', error)
+      console.error('Error fetching trashed candidates:', error)
+      toast.error('Failed to fetch trashed candidates')
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [candidatesSnap, vendorsSnap, jobsSnap, clientsSnap] = await Promise.all([
-          getDocs(collection(db, 'candidates')),
-          getDocs(collection(db, 'Vendor')),
-          getDocs(collection(db, 'jobs')),
-          getDocs(collection(db, 'Clients'))
-        ])
+    let cancelled = false;
 
-        const vendorsMap = {}
-        vendorsSnap.docs.forEach(doc => {
-          vendorsMap[doc.id] = doc.data().vendorName
-        })
-        setVendors(vendorsMap)
-
-        const jobsMap = {}
-        jobsSnap.docs.forEach(doc => {
-          jobsMap[doc.id] = doc.data().jobTitle
-        })
-        setJobs(jobsMap)
-
-        const clientsMap = {}
-        clientsSnap.docs.forEach(doc => {
-          clientsMap[doc.id] = doc.data().name
-        })
-        setClients(clientsMap)
-
-        const candidatesData = candidatesSnap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate()
-        }))
-        // Only show candidates that are in trash
-        setCandidates(candidatesData.filter(candidate => candidate.trash))
-      } catch (error) {
-        console.error('Error fetching data:', error)
-      } finally {
-        setLoading(false)
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (user && !cancelled) {
+        await fetchCandidatesData();
+      } else if (!user && !cancelled) {
+        setLoading(false);
       }
-    }
+    });
 
-    fetchData()
-  }, [])
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
 
-  const handleRestore = async (candidateId) => {
+  const handleRestore = async (candidateId: string) => {
     try {
-      const candidateRef = doc(db, 'candidates', candidateId)
-      await updateDoc(candidateRef, {
-        trash: false
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+
+      await apiFetch(`/candidates/${candidateId}/restore`, {
+        method: 'POST',
+        token
       })
-      // Refresh candidates list
-      fetchCandidatesData()
+
       toast.success('Candidate restored successfully')
-    } catch (error) {
+      fetchCandidatesData()
+    } catch (error: any) {
       console.error('Error restoring candidate:', error)
       toast.error('Failed to restore candidate')
     }
   }
 
-  const handlePermanentDelete = async (candidateId) => {
+  const handlePermanentDelete = async (candidateId: string) => {
     if (window.confirm('Are you sure you want to permanently delete this candidate? This action cannot be undone.')) {
       try {
-        const candidateRef = doc(db, 'candidates', candidateId)
-        await deleteDoc(candidateRef)
-        // Refresh candidates list
-        fetchCandidatesData()
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+
+        await apiFetch(`/candidates/${candidateId}/permanent`, {
+          method: 'DELETE',
+          token
+        })
+
         toast.success('Candidate permanently deleted')
-      } catch (error) {
+        fetchCandidatesData()
+      } catch (error: any) {
         console.error('Error deleting candidate:', error)
         toast.error('Failed to delete candidate')
       }
     }
   }
 
-  const filteredCandidates = candidates.filter(candidate => {
+  const filteredCandidates = candidates.filter((candidate: any) => {
     const searchFields = [
-      candidate.name?.toLowerCase() || '',
+      candidate.full_name?.toLowerCase() || '',
       candidate.email?.toLowerCase() || ''
     ]
 
-    return searchTerm === '' || 
+    return searchTerm === '' ||
       searchFields.some(field => field.includes(searchTerm.toLowerCase()))
   })
 
-  const handleViewProfile = (candidateId) => {
+  const handleViewProfile = (candidateId: string) => {
     setSelectedCandidateId(candidateId)
     setIsProfileOpen(true)
   }
@@ -170,14 +149,14 @@ const TrashPage = () => {
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {filteredCandidates.map((candidate) => (
-              <tr key={candidate.id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200">
+              <tr key={candidate._id} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div className="h-10 w-10 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700">
-                      {candidate.profilePic ? (
+                      {candidate.profile_pic ? (
                         <Image
-                          src={candidate.profilePic}
-                          alt={candidate.name}
+                          src={candidate.profile_pic}
+                          alt={candidate.full_name}
                           width={40}
                           height={40}
                           className="object-cover"
@@ -185,47 +164,47 @@ const TrashPage = () => {
                       ) : (
                         <div className="h-full w-full flex items-center justify-center">
                           <span className="text-lg font-bold text-primary-500">
-                            {candidate.name?.charAt(0)}
+                            {candidate.full_name?.charAt(0)}
                           </span>
                         </div>
                       )}
                     </div>
                     <div className="ml-4">
-                      <div className="font-medium text-gray-900 dark:text-white">{candidate.name}</div>
+                      <div className="font-medium text-gray-900 dark:text-white">{candidate.full_name}</div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">{candidate.email}</div>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-500 dark:text-gray-400">
-                    <div>Primary: {candidate.primaryContact || 'N/A'}</div>
-                    <div>Secondary: {candidate.secondaryContact || 'N/A'}</div>
+                    <div>Primary: {candidate.primary_contact || 'N/A'}</div>
+                    <div>Secondary: {candidate.secondary_contact || 'N/A'}</div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {vendors[candidate.vendorId] || 'N/A'}
+                  {candidate.vendor_id?.name || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {clients[candidate.clientId] || 'N/A'}
+                  {candidate.client_id?.name || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                  {jobs[candidate.jobId] || 'N/A'}
+                  {candidate.job_id?.title || 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <button
-                    onClick={() => handleViewProfile(candidate.id)}
+                    onClick={() => handleViewProfile(candidate._id)}
                     className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-200 mr-3"
                   >
                     <FiEye className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={() => handleRestore(candidate.id)}
+                  <button
+                    onClick={() => handleRestore(candidate._id)}
                     className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-200 mr-3"
                   >
                     <FiRefreshCw className="w-5 h-5" />
                   </button>
-                  <button 
-                    onClick={() => handlePermanentDelete(candidate.id)}
+                  <button
+                    onClick={() => handlePermanentDelete(candidate._id)}
                     className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200"
                   >
                     <FiTrash2 className="w-5 h-5" />
@@ -246,10 +225,12 @@ const TrashPage = () => {
       )}
 
       {/* Candidate Profile Modal */}
-      <CandidateProfile 
+      <CandidateProfile
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         candidateId={selectedCandidateId}
+        onEdit={() => { }}
+        onDelete={handlePermanentDelete}
       />
     </div>
   )
