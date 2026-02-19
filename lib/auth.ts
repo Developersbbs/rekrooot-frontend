@@ -71,5 +71,19 @@ export function isNotProvisionedError(err: unknown) {
 }
 
 export async function forgotPassword(email: string) {
-  await sendPasswordResetEmail(auth, email);
+  try {
+    // Check if user exists in backend first
+    await apiFetch("/auth/check-email", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+
+    // If check passes, send Firebase reset email
+    await sendPasswordResetEmail(auth, email);
+  } catch (err: any) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw new Error("Account not found. Please enter a registered email address.");
+    }
+    throw err;
+  }
 }

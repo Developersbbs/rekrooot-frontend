@@ -47,12 +47,42 @@ const LoadingSpinner = () => (
   </div>
 )
 
+interface Recruiter {
+  id: string;
+  display_name: string;
+  email: string;
+  contact: string;
+  role: string;
+  region: string;
+  company_name: string;
+  created_at?: string;
+}
+
+interface Candidate {
+  _id?: string;
+  id?: string;
+  full_name?: string;
+  name?: string;
+  status: number;
+  createdAt?: string;
+  created_at?: string;
+  job_id?: { title: string };
+  job_title?: string;
+}
+
+interface Stats {
+  candidates: Candidate[];
+  vendors: any[];
+  clients: any[];
+  interviews: any[];
+}
+
 const RecruiterDetails = () => {
   const params = useParams()
-  const [recruiter, setRecruiter] = useState(null)
+  const [recruiter, setRecruiter] = useState<Recruiter | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-  const [stats, setStats] = useState({
+  const [error, setError] = useState<string | null>(null)
+  const [stats, setStats] = useState<Stats>({
     candidates: [],
     vendors: [],
     clients: [],
@@ -60,8 +90,10 @@ const RecruiterDetails = () => {
   })
 
   useEffect(() => {
-    const fetchRecruiterData = async () => {
+    const fetchRecruiterData = async (firebaseUser: any) => {
       try {
+        setLoading(true);
+        setError(null);
         console.log('Fetching data for recruiter ID:', params.id)
 
         if (!params.id) {
@@ -70,9 +102,9 @@ const RecruiterDetails = () => {
           return
         }
 
-        const token = await auth.currentUser?.getIdToken()
+        const token = await firebaseUser.getIdToken();
         if (!token) {
-          setError('Not authenticated')
+          setError('Failed to retrieve authentication token')
           setLoading(false)
           return
         }
@@ -111,9 +143,9 @@ const RecruiterDetails = () => {
         // Fetch related data
         const [candidatesRes, vendorsRes, clientsRes, interviewsRes] = await Promise.all([
           apiFetch(`/candidates?created_by=${userData._id}`, { token }),
-          apiFetch('/vendors', { token }),
-          apiFetch('/clients', { token }),
-          apiFetch('/interviewers/all-interviews', { token })
+          apiFetch(`/vendors?created_by=${userData._id}`, { token }),
+          apiFetch(`/clients?created_by=${userData._id}`, { token }),
+          apiFetch(`/interviewers/all-interviews?created_by=${userData._id}`, { token })
         ]);
 
         setStats({
@@ -124,14 +156,23 @@ const RecruiterDetails = () => {
         })
 
         setLoading(false)
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error fetching recruiter data:', error)
         setError(error.message || 'Failed to load recruiter data')
         setLoading(false)
       }
     }
 
-    fetchRecruiterData()
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        fetchRecruiterData(user)
+      } else {
+        setError('Not authenticated')
+        setLoading(false)
+      }
+    })
+
+    return () => unsubscribe()
   }, [params.id])
 
   if (loading) return <LoadingSpinner />
@@ -161,27 +202,35 @@ const RecruiterDetails = () => {
 
   const candidatesPerDay = last7Days.map(date => {
     return stats.candidates.filter(c => {
-      const createdDate = c.created_at ? new Date(c.created_at) : null
+      const dateStr = c.createdAt || c.created_at;
+      const createdDate = dateStr ? new Date(dateStr) : null
       return createdDate && createdDate.toDateString() === date.toDateString()
     }).length
   })
 
+  // Mapping from numeric status (0-5) to labels
+  const statusLabels: { [key: number]: string } = {
+    0: 'Waiting',
+    1: 'Scheduled',
+    2: 'Rescheduled',
+    3: 'Review',
+    4: 'Interviewed',
+    5: 'Cancelled'
+  };
+
   const candidateStatusData = {
-    labels: ['Screening', 'Interview Scheduled', 'Selected', 'Rejected', 'On Hold'],
+    labels: Object.values(statusLabels),
     datasets: [{
-      data: [
-        stats.candidates.filter(c => c.status === 'screening').length,
-        stats.candidates.filter(c => c.status === 'interview_scheduled').length,
-        stats.candidates.filter(c => c.status === 'selected').length,
-        stats.candidates.filter(c => c.status === 'rejected').length,
-        stats.candidates.filter(c => c.status === 'on_hold').length,
-      ],
+      data: Object.keys(statusLabels).map(s =>
+        stats.candidates.filter(c => c.status === parseInt(s)).length
+      ),
       backgroundColor: [
-        '#60A5FA',
-        '#34D399',
-        '#F59E0B',
-        '#EF4444',
-        '#6B7280',
+        '#9DA2AB', // Waiting - Gray
+        '#60A5FA', // Scheduled - Blue
+        '#818CF8', // Rescheduled - Indigo
+        '#FBBF24', // Review - Amber
+        '#34D399', // Interviewed - Green
+        '#EF4444', // Cancelled - Red
       ],
     }],
   }
@@ -220,37 +269,39 @@ const RecruiterDetails = () => {
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                   {recruiter.display_name}
                 </h1>
-                <p className="text-gray-600 dark:text-gray-400">
-                  {recruiter.role} - {recruiter.region} Region
+                <p className="text-gray-600 dark:text-gray-400 font-medium">
+                  {recruiter.role} {recruiter.region && ` - ${recruiter.region} Region`}
                 </p>
-                <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
-                  {recruiter.email}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-500">
-                  {recruiter.contact}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-500">
-                  Company: {recruiter.company_name}
-                </p>
+                <div className="mt-2 space-y-1">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="font-medium">Email:</span> {recruiter.email}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="font-medium">Phone:</span> {recruiter.contact}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    <span className="font-medium">Company:</span> {recruiter.company_name}
+                  </p>
+                </div>
               </div>
-              <div className="flex gap-4">
-                <div className="text-center">
+              <div className="flex gap-6">
+                <div className="text-center px-4 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-xl">
                   <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                     {stats.candidates.length}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Candidates</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Candidates</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center px-4 py-2 bg-accent-50 dark:bg-accent-900/20 rounded-xl">
                   <div className="text-2xl font-bold text-accent-600 dark:text-accent-400">
                     {stats.vendors.length}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Vendors</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Vendors</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center px-4 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-xl">
                   <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                     {stats.interviews.length}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Interviews</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Interviews</div>
                 </div>
               </div>
             </div>
@@ -260,36 +311,52 @@ const RecruiterDetails = () => {
         {/* Stats Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Candidates Added Chart */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Candidates Added (Last 7 Days)
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 flex items-center justify-between">
+              Candidates Added
+              <span className="text-sm font-normal text-gray-500">Last 7 Days</span>
             </h2>
-            <Line
-              data={{
-                labels: last7Days.map(d => d.toLocaleDateString()),
-                datasets: [{
-                  label: 'Candidates Added',
-                  data: candidatesPerDay,
-                  borderColor: '#6366F1',
-                  backgroundColor: '#6366F1',
-                  tension: 0.4
-                }]
-              }}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: {
-                    display: false
+            <div className="h-[300px]">
+              <Line
+                data={{
+                  labels: last7Days.map(d => d.toLocaleDateString()),
+                  datasets: [{
+                    label: 'Candidates Added',
+                    data: candidatesPerDay,
+                    borderColor: '#6366F1',
+                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                  }]
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      backgroundColor: '#1F2937',
+                      padding: 12,
+                      titleFont: { size: 14 },
+                      bodyFont: { size: 12 },
+                      cornerRadius: 8
+                    }
+                  },
+                  scales: {
+                    y: { beginAtZero: true, grid: { display: false } },
+                    x: { grid: { display: false } }
                   }
-                }
-              }}
-            />
+                }}
+              />
+            </div>
           </div>
 
           {/* Candidate Status Distribution */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Candidate Status Distribution
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
+              Pipeline Distribution
             </h2>
             <div className="h-[300px] flex items-center justify-center">
               <Doughnut
@@ -299,7 +366,13 @@ const RecruiterDetails = () => {
                   maintainAspectRatio: false,
                   plugins: {
                     legend: {
-                      position: 'right'
+                      position: 'right',
+                      labels: {
+                        boxWidth: 12,
+                        padding: 20,
+                        usePointStyle: true,
+                        font: { size: 12 }
+                      }
                     }
                   }
                 }}
@@ -309,54 +382,68 @@ const RecruiterDetails = () => {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
             Recent Activity
           </h2>
           {stats.candidates.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              No candidates found
+            <div className="text-center py-12 bg-gray-50 dark:bg-gray-900/50 rounded-2xl">
+              <p className="text-gray-500 dark:text-gray-400">No recent activity found</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {stats.candidates
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                .slice(0, 5)
-                .map(candidate => (
-                  <div
-                    key={candidate.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-gray-50 dark:bg-gray-700/50"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center">
-                        <span className="text-primary-600 dark:text-primary-400 font-medium">
-                          {candidate.name?.[0]?.toUpperCase() || 'C'}
-                        </span>
+              {[...stats.candidates]
+                .sort((a, b) => {
+                  const dateA = new Date(a.createdAt || a.created_at || 0).getTime();
+                  const dateB = new Date(b.createdAt || b.created_at || 0).getTime();
+                  return dateB - dateA;
+                })
+                .slice(0, 10)
+                .map(candidate => {
+                  const cStatus = candidate.status || 0;
+                  const cLabel = statusLabels[cStatus] || 'Unknown';
+
+                  return (
+                    <div
+                      key={candidate._id || candidate.id}
+                      className="flex items-center justify-between p-5 rounded-2xl bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200 border border-transparent hover:border-gray-200 dark:hover:border-gray-600"
+                    >
+                      <div className="flex items-center gap-5">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary-500/10 to-accent-500/10 flex items-center justify-center border border-primary-500/20">
+                          <span className="text-primary-600 dark:text-primary-400 font-bold text-lg">
+                            {(candidate.full_name || candidate.name)?.[0]?.toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-gray-900 dark:text-white">
+                            {candidate.full_name || candidate.name}
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            {candidate.job_id?.title || candidate.job_title || 'Position not specified'}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-medium text-gray-900 dark:text-white">
-                          {candidate.name}
-                        </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {candidate.job_title}
+                      <div className="text-right flex flex-col items-end gap-2">
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wide uppercase ${cStatus === 4 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                          cStatus === 5 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                            'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          }`}>
+                          {cLabel}
+                        </span>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          {(() => {
+                            const dateStr = candidate.createdAt || candidate.created_at;
+                            return dateStr ? new Date(dateStr).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            }) : 'N/A';
+                          })()}
                         </p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${candidate.status === 'selected'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-400'
-                        : candidate.status === 'rejected'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-400'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-400'
-                        }`}>
-                        {candidate.status?.replace('_', ' ').toUpperCase()}
-                      </span>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        {new Date(candidate.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           )}
         </div>

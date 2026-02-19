@@ -19,19 +19,19 @@ const AllCandidates = () => {
   const [filterVendor, setFilterVendor] = useState('all')
   const [filterClient, setFilterClient] = useState('all')
   const [filterJob, setFilterJob] = useState('all')
-  const [vendors, setVendors] = useState([])
+  const [vendors, setVendors] = useState<any[]>([])
   const [isSubmittingAction, setIsSubmittingAction] = useState(false)
-  const [jobs, setJobs] = useState([])
-  const [clients, setClients] = useState([])
+  const [jobs, setJobs] = useState<any[]>([])
+  const [clients, setClients] = useState<any[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState(null)
   const [selectedJob, setSelectedJob] = useState(null)
-  const [editingCandidate, setEditingCandidate] = useState(null)
+  const [editingCandidate, setEditingCandidate] = useState<any>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [selectedCandidateId, setSelectedCandidateId] = useState(null)
   const [userData, setUserData] = useState(null)
-  const [selectedCompany, setSelectedCompany] = useState(null)
+  const [selectedCompany, setSelectedCompany] = useState<any>(null)
   const [isRescheduleOpen, setIsRescheduleOpen] = useState(false)
   const [reschedulingCandidate, setReschedulingCandidate] = useState(null)
   const [mounted, setMounted] = useState(false)
@@ -179,24 +179,33 @@ const AllCandidates = () => {
   }, [candidates, fetchCandidatesData])
 
   const handleEdit = useCallback((candidate) => {
+    const extractId = (val: any) => {
+      if (!val) return '';
+      if (typeof val === 'string') return val;
+      if (val._id) return typeof val._id === 'object' ? (val._id.$oid || val._id) : val._id;
+      if (val.$oid) return val.$oid;
+      return val;
+    };
+
     const cleanedCandidate = {
-      id: candidate._id || candidate.id,
+      id: extractId(candidate),
       full_name: candidate.full_name || '',
       email: candidate.email || '',
       location: candidate.location || '',
       primary_contact: candidate.primary_contact || '',
       secondary_contact: candidate.secondary_contact || '',
-      vendor_id: candidate.vendor_id?._id || candidate.vendor_id || '',
-      client_id: candidate.client_id?._id || candidate.client_id || '',
-      job_id: candidate.job_id?._id || candidate.job_id || '',
+      vendor_id: extractId(candidate.vendor_id),
+      client_id: extractId(candidate.client_id),
+      job_id: extractId(candidate.job_id),
+      experience_years: candidate.experience_years || '',
       final_status: candidate.final_status || null,
       profile_pic: candidate.profile_pic || null,
       resumes: candidate.resumes || [],
       supporting_documents: candidate.supporting_documents || [],
-      interviewer_id: candidate.interview_id?.interviewer_id?._id || candidate.interview_id?.interviewer_id || '',
+      interviewer_id: extractId(candidate.interview_id?.interviewer_id),
       interviewDate: candidate.interview_id?.date_time ? new Date(candidate.interview_id.date_time).toLocaleDateString() : '',
       interviewTime: candidate.interview_id?.date_time ? new Date(candidate.interview_id.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
-      interviewId: candidate.interview_id?._id || candidate.interview_id || ''
+      interviewId: extractId(candidate.interview_id)
     }
     setEditingCandidate(cleanedCandidate)
     setIsEditDialogOpen(true)
@@ -410,12 +419,7 @@ const AllCandidates = () => {
     "RESCHEDULED": { label: 'RESCHEDULED', style: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-300' },
     "IN REVIEW": { label: 'IN REVIEW', style: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300' },
     "INTERVIEWED": { label: 'INTERVIEWED', style: 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-300' },
-    "SELECTED": { label: 'SELECTED', style: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' },
-    "REJECTED": { label: 'REJECTED', style: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' },
-    "NO SHOW": { label: 'NO SHOW', style: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' },
-    "CANCELLED": { label: 'CANCELLED', style: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400' },
-    "PROXY": { label: 'PROXY', style: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300' },
-    "TECHNICAL ISSUE": { label: 'TECHNICAL ISSUE', style: 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-300' },
+    "CANCELLED": { label: 'CANCELLED', style: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300' },
   }
 
   if (loading) {
@@ -495,9 +499,11 @@ const AllCandidates = () => {
             className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-primary-500 outline-none"
           >
             <option value="all">All Jobs</option>
-            {(jobs || []).map((job) => (
-              <option key={job._id || job.id} value={job._id || job.id}>{job.title || job.jobTitle}</option>
-            ))}
+            {(jobs || [])
+              .filter(job => String(job.status) === '0')
+              .map((job) => (
+                <option key={job._id || job.id} value={job._id || job.id}>{job.title || job.jobTitle}</option>
+              ))}
           </select>
         </div>
       </div>
@@ -532,7 +538,7 @@ const AllCandidates = () => {
                       {candidate.profile_pic ? (
                         <Image
                           src={candidate.profile_pic}
-                          alt={candidate.name}
+                          alt={candidate.full_name || 'Candidate profile picture'}
                           width={40}
                           height={40}
                           className="object-cover"
@@ -698,7 +704,6 @@ const AllCandidates = () => {
         isEditing={true}
         showClientJobDropdowns={true}
         onCandidateAdded={fetchCandidatesData}
-        onSubmit={handleEditSubmit}
       />
 
       <CandidateProfile

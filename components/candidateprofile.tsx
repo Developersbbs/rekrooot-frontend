@@ -1,29 +1,26 @@
 'use client'
-import React, { useState, useEffect, Fragment } from 'react'
-import { FiX, FiDownload, FiEye, FiEdit2, FiTrash2, FiMail, FiArrowRight } from 'react-icons/fi'
+import { useState, useEffect, Fragment } from 'react'
+import { FiX, FiDownload, FiEye, FiEdit2, FiTrash2, FiArrowRight } from 'react-icons/fi'
 import Image from 'next/image'
-import { Document, Page } from 'react-pdf';
 import DocViewer, { DocViewerRenderers } from "@cyntler/react-doc-viewer";
 import { pdfjs } from 'react-pdf';
 import { toast } from 'react-hot-toast';
 import { apiFetch } from '@/lib/api'
 import { auth, storage } from '@/lib/firebase'
 import { ref, getDownloadURL } from 'firebase/storage'
-import { collection, query, where, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 // Helper function to format time in relative format
 const getRelativeTime = (dateString: string | Date | null | undefined): string => {
   if (!dateString) return 'N/A';
-  
+
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  
+
   if (diffHours < 1) {
     const diffMinutes = Math.floor(diffMs / (1000 * 60));
     return diffMinutes <= 1 ? 'Just now' : `${diffMinutes} minutes ago`;
@@ -95,6 +92,10 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
       }
     }
 
+    const handleCompanyChange = (event: any) => {
+      setSelectedCompany(event.detail);
+    };
+
     const selectedCompanyStr = localStorage.getItem('selectedCompany')
     if (selectedCompanyStr) {
       try {
@@ -104,7 +105,12 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
       }
     }
 
+    window.addEventListener('companyChanged', handleCompanyChange);
     loadUserData()
+
+    return () => {
+      window.removeEventListener('companyChanged', handleCompanyChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -275,73 +281,27 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
     }
   };
 
-  const handleResendEmail = async () => {
-    if (!candidate) return;
-
+  const fetchClientsAndJobs = async () => {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
 
-      const loadingToastId = toast.loading('Sending email notifications...');
-
-      const emailResult: any = await apiFetch('/emails/send-interview-slot', {
-        method: 'POST',
-        token,
-        body: JSON.stringify({
-          candidateEmail: candidate.email,
-          candidateName: candidate.full_name,
-          recruiterEmail: userData?.email,
-          jobTitle: candidate.jobTitle,
-          clientName: candidate.clientName,
-          link: `${window.location.origin}/timeslots?candidateId=${candidateId}`,
-          type: 'resend'
-        }),
-      });
-
-      toast.dismiss(loadingToastId);
-
-      if (emailResult.success) {
-        toast.success('Email notifications sent successfully');
-      } else {
-        toast.error('Failed to send notifications');
+      // Build company query param if a specific company is selected
+      let queryParams = '';
+      if (selectedCompany?.id && selectedCompany.id !== 'all') {
+        queryParams = `?company_id=${selectedCompany.id}`;
       }
-    } catch (error: any) {
-      console.error('Error sending emails:', error);
-      toast.error(`Failed to send emails: ${error.message}`);
-    }
-  };
 
-  const fetchClientsAndJobs = async () => {
-    try {
-      const shouldFilterByCompany = !(userData?.role === 'SuperAdmin' && selectedCompany?.name === 'All');
-      const companyName = userData?.role === 'SuperAdmin'
-        ? selectedCompany?.name
-        : userData?.company;
+      // Fetch clients and ALL jobs from rekroot-server in parallel
+      const [clientsRes, jobsRes] = await Promise.all([
+        apiFetch(`/clients${queryParams}`, { token }),
+        apiFetch(`/jobs${queryParams}`, { token }),
+      ]);
 
-      if (!companyName) return;
+      const clientsData = (clientsRes as any).clients || [];
+      const jobsData = (jobsRes as any).jobs || [];
 
-      // Fetch clients
-      let clientsQuery = collection(db, 'Clients');
-      if (shouldFilterByCompany) {
-        clientsQuery = query(clientsQuery, where('company', '==', companyName));
-      }
-      const clientsSnap = await getDocs(clientsQuery);
-      const clientsData = clientsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
       setClients(clientsData);
-
-      // Fetch all jobs
-      let jobsQuery = collection(db, 'jobs');
-      if (shouldFilterByCompany) {
-        jobsQuery = query(jobsQuery, where('company', '==', companyName));
-      }
-      const jobsSnap = await getDocs(jobsQuery);
-      const jobsData = jobsSnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
       setJobs(jobsData);
     } catch (error) {
       console.error('Error fetching clients and jobs:', error);
@@ -353,8 +313,12 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
     setSelectedClientId(clientId);
     setSelectedJobId(''); // Reset job selection
 
-    // Filter jobs for selected client
-    const jobsForClient = jobs.filter(job => job.clientId === clientId);
+    // Filter jobs for the selected client
+    // The server returns client_id as a populated object { _id, name }
+    const jobsForClient = jobs.filter((job: any) => {
+      const jobClientId = job.client_id?._id || job.client_id;
+      return String(jobClientId) === String(clientId);
+    });
     setFilteredJobs(jobsForClient);
   };
 
@@ -369,21 +333,52 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error('Not authenticated');
 
-      // Update candidate via backend API
+      // 1. Cancel old meeting if it exists
+      const oldInterview = candidate?.interview_id;
+      if (oldInterview && oldInterview.session_id && oldInterview.presenter_id) {
+        try {
+          await apiFetch('/meetings/cancel', {
+            method: 'POST',
+            token,
+            body: JSON.stringify({
+              sessionId: oldInterview.session_id,
+              presenterId: oldInterview.presenter_id,
+              zsoid: oldInterview.zsoid
+            })
+          });
+        } catch (err) {
+          console.error('Error cancelling old meeting during migration:', err);
+        }
+      }
+
+      // 2. Update candidate with new job and RESET all status/rating fields
       await apiFetch(`/candidates/${candidateId}`, {
         method: 'PUT',
         token,
         body: JSON.stringify({
           client_id: selectedClientId,
           job_id: selectedJobId,
-          final_status: null // Reset final status for new position
+          status: 0, // Reset to Waiting
+          interview_id: null,
+          final_status: null,
+          result: null,
+          feedback: null,
+          technical_rating: null,
+          communication_rating: null,
+          overall_rating: null,
+          video_url: null,
+          result_document_url: null,
+          notes: null
         })
       });
 
       // Show loading toast for email
-      const emailLoadingToast = toast.loading('Sending migration notifications...');
+      const emailLoadingToast = toast.loading('Sending migration & invite notifications...');
 
-      // Send emails via backend API
+      const newJobTitle = filteredJobs.find((j: any) => (j._id || j.id) === selectedJobId)?.title || 'N/A';
+      const newClientName = clients.find((c: any) => (c._id || c.id) === selectedClientId)?.name || 'N/A';
+
+      // 3. Send INVITE email for the new job
       const emailResult: any = await apiFetch('/emails/send-interview-slot', {
         method: 'POST',
         token,
@@ -391,23 +386,23 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
           candidateEmail: candidate.email,
           candidateName: candidate.full_name,
           recruiterEmail: userData?.email,
-          jobTitle: filteredJobs.find(j => j.id === selectedJobId)?.title || 'N/A',
-          clientName: clients.find(c => c.id === selectedClientId)?.name || 'N/A',
-          type: 'migration' // Signal migration to backend if supported
+          jobTitle: newJobTitle,
+          clientName: newClientName,
+          link: `${window.location.origin}/timeslots?candidateId=${candidateId}`,
+          type: 'invite' // Send invitation for the new job
         }),
       });
 
       toast.dismiss(emailLoadingToast);
 
       if (emailResult.success) {
-        toast.success('Candidate migrated and notifications sent successfully');
+        toast.success('Candidate migrated and invite sent successfully');
       } else {
-        toast.error('Migration successful but failed to send notifications');
+        toast.error('Migration successful but failed to send invite');
       }
 
       setIsMigrateModalOpen(false);
       onClose(); // Close the profile modal
-      // Refresh data if needed (via parents)
     } catch (error: any) {
       console.error('Error in migration process:', error);
       toast.error(`Migration failed: ${error.message}`);
@@ -440,6 +435,10 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
               {/* Migrate Action */}
               <button
                 onClick={() => {
+                  if (!selectedCompany || selectedCompany.id === 'all') {
+                    toast.error('Please select a specific company from the header before migrating');
+                    return;
+                  }
                   setIsMigrateModalOpen(true);
                   fetchClientsAndJobs();
                 }}
@@ -756,7 +755,6 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
                             <button
                               onClick={async () => {
                                 try {
-                                  const storage = getStorage();
                                   const docRef = ref(storage, candidate.resultDocumentURL);
                                   const url = await getDownloadURL(docRef);
                                   if (typeof window !== 'undefined') {
@@ -968,8 +966,8 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                               >
                                 <option value="">Select a client</option>
-                                {clients.map(client => (
-                                  <option key={client.id} value={client.id}>
+                                {clients.map((client: any) => (
+                                  <option key={client._id || client.id} value={client._id || client.id}>
                                     {client.name}
                                   </option>
                                 ))}
@@ -988,11 +986,17 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-primary-500 focus:border-primary-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white disabled:opacity-50"
                               >
                                 <option value="">Select a job</option>
-                                {filteredJobs.map(job => (
-                                  <option key={job.id} value={job.id}>
-                                    {job.jobTitle}
-                                  </option>
-                                ))}
+                                {filteredJobs
+                                  .filter((job: any) => {
+                                    const currentJobId = candidate?.job_id?._id || candidate?.job_id;
+                                    const jobId = job._id || job.id;
+                                    return String(jobId) !== String(currentJobId) && String(job.status) === '0';
+                                  })
+                                  .map((job: any) => (
+                                    <option key={job._id || job.id} value={job._id || job.id}>
+                                      {job.title}
+                                    </option>
+                                  ))}
                               </select>
                             </div>
                           </div>

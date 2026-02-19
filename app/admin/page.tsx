@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, PieChart, Pie, Cell,
@@ -190,9 +190,7 @@ function DashboardPage() {
         ))}
       </div>
 
-      {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Line Chart */}
         <motion.div
           className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-6 rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50"
           {...fadeInUp}
@@ -201,105 +199,113 @@ function DashboardPage() {
             <span className="w-2 h-6 bg-primary-500 rounded-full mr-3"></span>
             Monthly Interview Trends
           </h2>
-          <div className="w-full h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="currentColor"
-                  opacity={0.1}
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="month"
-                  stroke="currentColor"
-                  tick={{
-                    fill: 'currentColor',
-                    fontSize: 12,
-                    fontWeight: 500
-                  }}
-                  axisLine={{ stroke: 'currentColor', opacity: 0.2 }}
-                  tickLine={{ stroke: 'currentColor', opacity: 0.2 }}
-                  padding={{ left: 10, right: 10 }}
-                />
-                <YAxis
-                  stroke="currentColor"
-                  tick={{
-                    fill: 'currentColor',
-                    fontSize: 12,
-                    fontWeight: 500
-                  }}
-                  axisLine={{ stroke: 'currentColor', opacity: 0.2 }}
-                  tickLine={{ stroke: 'currentColor', opacity: 0.2 }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    color: '#1f2937',
-                    padding: '12px'
-                  }}
-                  labelStyle={{
-                    color: '#374151',
-                    fontWeight: 600,
-                    marginBottom: '4px'
-                  }}
-                  itemStyle={{
-                    color: '#374151',
-                    padding: '4px 0'
-                  }}
-                />
-                <Legend
-                  verticalAlign="top"
-                  height={36}
-                  formatter={(value: string) => (
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {value.charAt(0).toUpperCase() + value.slice(1)}
-                    </span>
-                  )}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="interviews"
-                  stroke="#2f4858"
-                  strokeWidth={2}
-                  dot={{
-                    strokeWidth: 2,
-                    fill: '#fff',
-                    r: 4
-                  }}
-                  activeDot={{
-                    r: 6,
-                    strokeWidth: 2,
-                    stroke: '#2f4858',
-                    fill: '#fff'
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="selected"
-                  stroke="#fb8404"
-                  strokeWidth={2}
-                  dot={{
-                    strokeWidth: 2,
-                    fill: '#fff',
-                    r: 4
-                  }}
-                  activeDot={{
-                    r: 6,
-                    strokeWidth: 2,
-                    stroke: '#fb8404',
-                    fill: '#fff'
-                  }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {monthlyData.length > 0 && monthlyData.some(d => d.interviews > 0 || d.selected > 0) ? (
+            <div className="w-full h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyData}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="currentColor"
+                    opacity={0.1}
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="month"
+                    stroke="currentColor"
+                    tick={{
+                      fill: 'currentColor',
+                      fontSize: 12,
+                      fontWeight: 500
+                    }}
+                    axisLine={{ stroke: 'currentColor', opacity: 0.2 }}
+                    tickLine={{ stroke: 'currentColor', opacity: 0.2 }}
+                    padding={{ left: 10, right: 10 }}
+                  />
+                  <YAxis
+                    stroke="currentColor"
+                    tick={{
+                      fill: 'currentColor',
+                      fontSize: 12,
+                      fontWeight: 500
+                    }}
+                    axisLine={{ stroke: 'currentColor', opacity: 0.2 }}
+                    tickLine={{ stroke: 'currentColor', opacity: 0.2 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      color: '#1f2937',
+                      padding: '12px'
+                    }}
+                    labelStyle={{
+                      color: '#374151',
+                      fontWeight: 600,
+                      marginBottom: '4px'
+                    }}
+                    itemStyle={{
+                      color: '#374151',
+                      padding: '4px 0'
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    height={36}
+                    formatter={(value: string) => (
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                      </span>
+                    )}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="interviews"
+                    stroke="#2f4858"
+                    strokeWidth={2}
+                    dot={{
+                      strokeWidth: 2,
+                      fill: '#fff',
+                      r: 4
+                    }}
+                    activeDot={{
+                      r: 6,
+                      strokeWidth: 2,
+                      stroke: '#2f4858',
+                      fill: '#fff'
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="selected"
+                    stroke="#fb8404"
+                    strokeWidth={2}
+                    dot={{
+                      strokeWidth: 2,
+                      fill: '#fff',
+                      r: 4
+                    }}
+                    activeDot={{
+                      r: 6,
+                      strokeWidth: 2,
+                      stroke: '#fb8404',
+                      fill: '#fff'
+                    }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="w-full h-[300px] flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-700/20 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+              <svg className="w-12 h-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              <p className="text-sm font-medium">No trend data available</p>
+            </div>
+          )}
         </motion.div>
 
-        {/* Pie Chart */}
         <motion.div
           className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-6 rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50"
           {...fadeInUp}
@@ -308,52 +314,61 @@ function DashboardPage() {
             <span className="w-2 h-6 bg-accent-500 rounded-full mr-3"></span>
             Candidate Status Distribution
           </h2>
-          <div className="w-full h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={candidateStatusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {candidateStatusData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={COLORS[index % COLORS.length]}
-                      className="hover:opacity-80 transition-opacity"
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                    color: '#1f2937'
-                  }}
-                  labelStyle={{ color: '#374151' }}
-                  itemStyle={{ color: '#374151' }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  formatter={(value: string) => (
-                    <span className="text-gray-700 dark:text-gray-300">{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          {candidateStatusData.length > 0 && candidateStatusData.some(d => d.value > 0) ? (
+            <div className="w-full h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={candidateStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    fill="#8884d8"
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {candidateStatusData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                        className="hover:opacity-80 transition-opacity"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      color: '#1f2937'
+                    }}
+                    labelStyle={{ color: '#374151' }}
+                    itemStyle={{ color: '#374151' }}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    formatter={(value: string) => (
+                      <span className="text-gray-700 dark:text-gray-300">{value}</span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="w-full h-[300px] flex flex-col items-center justify-center text-gray-500 dark:text-gray-400 bg-gray-50/50 dark:bg-gray-700/20 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+              <svg className="w-12 h-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+              </svg>
+              <p className="text-sm font-medium">No distribution data available</p>
+            </div>
+          )}
         </motion.div>
       </div>
 
-      {/* Recent Interviews Table */}
       <motion.div
         className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm p-6 rounded-xl shadow-lg border border-gray-200/50 dark:border-gray-700/50"
         {...fadeInUp}

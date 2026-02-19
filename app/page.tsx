@@ -11,6 +11,7 @@ import { Button } from "../components/ui/button";
 import { MoonIcon, SunIcon } from "@radix-ui/react-icons";
 import { useTheme } from "next-themes";
 import { isNotProvisionedError, loginWithEmailPasswordStrict, forgotPassword } from "@/lib/auth";
+import Image from "next/image";
 
 
 export default function Home() {
@@ -134,9 +135,13 @@ export default function Home() {
       {/* Centered login card */}
       <Card className="relative z-10 w-full max-w-md bg-background/90 backdrop-blur border border-border shadow-xl">
         <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto mb-1 h-12 w-12 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground text-xl font-bold">R</span>
-          </div>
+          <Image
+            src="/assets/logo/logo-small.png"
+            alt="Rekrooot Logo"
+            width={100}
+            height={100}
+            className="mx-auto"
+          />
           <CardTitle className="text-2xl font-semibold">Welcome back</CardTitle>
           <CardDescription>Sign in to continue to Rekrooot.</CardDescription>
         </CardHeader>

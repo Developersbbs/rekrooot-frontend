@@ -38,7 +38,9 @@ const TimeslotsPageContent = () => {
   const [availableSlots, setAvailableSlots] = useState([])
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [interviewers, setInterviewers] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [isFullyScheduled, setIsFullyScheduled] = useState(false)
+  const [isSlotReserved, setIsSlotReserved] = useState(false)
   const [candidateAssignedInterviewerId, setCandidateAssignedInterviewerId] = useState(null)
   const [interviewDetails, setInterviewDetails] = useState({
     company: {
@@ -111,17 +113,30 @@ const TimeslotsPageContent = () => {
             date: formattedDate,
             time: format(new Date(iv.date_time), 'hh:mm a'),
             meetingLink: iv.meeting_link,
-            isExisting: true // Mark as existing to show the "Already Scheduled" dialog
+            isExisting: true,
+            interviewer: iv.interviewer_id?.name || iv.interviewer_name || "Interviewer"
           });
+
+          if (iv.meeting_link) {
+            setIsFullyScheduled(true);
+          } else {
+            setIsSlotReserved(true);
+          }
         }
 
       } catch (error) {
         console.error('Error fetching data:', error)
         toast.error('Error fetching interview details')
+      } finally {
+        setLoading(false);
       }
     }
 
-    fetchData()
+    if (candidateId) {
+      fetchData()
+    } else {
+      setLoading(false);
+    }
   }, [candidateId])
 
   useEffect(() => {
@@ -264,6 +279,7 @@ const TimeslotsPageContent = () => {
 
       toast.success('Interview slot confirmed! Meeting scheduled.');
       setShowSuccessPopup(true);
+      setIsFullyScheduled(true);
 
     } catch (error) {
       console.error('Error confirming slot:', error);
@@ -375,6 +391,91 @@ const TimeslotsPageContent = () => {
   const handleDialogClose = () => {
     setOpenDialog(false);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4">
+        <ClipLoader size={50} color="#3b82f6" />
+      </div>
+    );
+  }
+
+  if (isFullyScheduled) {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4 sm:p-8">
+        <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-700 transition-all duration-300">
+          <div className="bg-green-500 p-8 text-center">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4 backdrop-blur-sm">
+              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white uppercase tracking-tight">Interview Scheduled</h2>
+          </div>
+          <div className="p-8 space-y-6">
+            <div className="space-y-1">
+              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Candidate</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">{interviewDetails?.candidate?.name}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Date</p>
+                <p className="text-gray-900 dark:text-gray-100 font-medium">{meetingDetails?.date}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Time</p>
+                <p className="text-gray-900 dark:text-gray-100 font-medium">{meetingDetails?.time}</p>
+              </div>
+            </div>
+            {meetingDetails?.meetingLink && (
+              <div className="space-y-2 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Meeting Link</p>
+                <a
+                  href={meetingDetails.meetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block p-3 bg-primary-50 dark:bg-primary-900/10 rounded-xl text-primary-500 font-bold text-center text-sm break-all hover:bg-primary-100 dark:hover:bg-primary-900/20 transition-all"
+                >
+                  Join Interview Session
+                </a>
+              </div>
+            )}
+            <div className="pt-4 text-center">
+              <p className="text-xs text-gray-400">A confirmation email has been sent to your inbox.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSlotReserved) {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4 sm:p-8">
+        <div className="max-w-lg w-full bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-700 border-t-8 border-t-amber-500 transition-all duration-300">
+          <div className="p-10 text-center space-y-6">
+            <div className="w-20 h-20 bg-amber-50 dark:bg-amber-900/10 rounded-full flex items-center justify-center mx-auto">
+              <MdWarning className="w-10 h-10 text-amber-500" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">Interview Already Selected</h2>
+              <p className="text-gray-500 dark:text-gray-400 text-lg leading-relaxed">
+                A slot for <span className="font-bold text-gray-900 dark:text-gray-100">{meetingDetails?.date}</span> at <span className="font-bold text-gray-900 dark:text-gray-100">{meetingDetails?.time}</span> has already been confirmed.
+              </p>
+            </div>
+            <div className="py-6 px-4 bg-gray-50 dark:bg-gray-900/30 rounded-2xl">
+              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed text-center">
+                Our team is currently preparing your meeting link. You will receive an automated email as soon as it's ready.
+              </p>
+            </div>
+            <p className="text-xs text-gray-400 pt-4 cursor-default uppercase tracking-tight">
+              If you need to reschedule, please contact the recruitment team directly.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark p-4 md:p-8">

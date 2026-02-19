@@ -200,7 +200,7 @@ const InterviewedCand = () => {
                         {candidate.profile_pic ? (
                           <Image
                             src={candidate.profile_pic}
-                            alt={candidate.full_name}
+                            alt={candidate.full_name || 'Candidate profile picture'}
                             width={40}
                             height={40}
                             className="object-cover"

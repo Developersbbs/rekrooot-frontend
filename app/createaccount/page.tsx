@@ -121,7 +121,7 @@ export default function CreateAccount() {
         <CardHeader className="space-y-4 text-center pt-8">
           <div className="mx-auto relative w-24 h-12 flex items-center justify-center">
             <Image
-              src="/assets/logo/logo.png"
+              src="/assets/logo/logo-small.png"
               alt="Rekrooot Logo"
               fill
               className="object-contain"

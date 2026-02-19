@@ -664,12 +664,12 @@ const JobsPage = () => {
                 <tr className="bg-gradient-to-r from-primary-500/10 via-accent-500/5 to-primary-500/10 dark:from-primary-900/50 dark:via-accent-900/30 dark:to-primary-900/50">
                   <th scope="col" className="sticky left-0 bg-inherit px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">#</th>
                   <th scope="col" className="sticky left-[60px] bg-inherit px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Client</th>
-                  <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Job Role</th>
+                  <th scope="col" className="px-6 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Job Role</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Apply</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Total</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Waiting</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Scheduled</th>
-                  <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Interview In Review</th>
+                  <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">In Review</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Selected</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Rejected</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">No Show</th>
@@ -696,10 +696,10 @@ const JobsPage = () => {
                       </td>
                       <td className="sticky left-[60px] bg-inherit group-hover:bg-gray-50/80 dark:group-hover:bg-gray-800/80 px-4 py-4">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
-                          {job.clientName || client?.clientName || client?.name || 'Unknown Client'}
+                          {job.clientName || client?.clientName || client?.name || 'N/A'}
                         </div>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900 dark:text-white">{job.jobTitle}</div>
                         <div className="text-xs text-gray-500 dark:text-gray-400">{job.jobLocation}</div>
                       </td>

@@ -8,6 +8,36 @@ import { toast } from 'react-hot-toast'
 import { apiFetch } from '@/lib/api'
 import { auth } from '@/lib/firebase'
 
+interface Recruiter {
+  id: string;
+  _id?: string;
+  uid?: string;
+  firebase_uid?: string;
+  name: string;
+  display_name?: string;
+  email: string;
+  contact?: string;
+  phone_number?: string;
+  role: string | number;
+  region: string;
+  company_name: string;
+  company_id?: any;
+  lead_recruiter_id?: string;
+  recruiters?: Recruiter[];
+  recruitersByRegion?: {
+    East: Recruiter[];
+    West: Recruiter[];
+    North: Recruiter[];
+    South: Recruiter[];
+  };
+  team?: Recruiter[];
+}
+
+interface Company {
+  id: string;
+  name: string;
+}
+
 const LoadingSpinner = () => (
   <div className="min-h-screen flex items-center justify-center">
     <div className="flex flex-col items-center space-y-4">
@@ -55,19 +85,19 @@ const InfoItem = ({ icon, value, className }) => {
 
 const RecruiterPage = () => {
   const router = useRouter();
-  const [selectedRecruiter, setSelectedRecruiter] = useState(null)
+  const [selectedRecruiter, setSelectedRecruiter] = useState<Recruiter | null>(null)
   const [activeRegion, setActiveRegion] = useState('East')
-  const [recruiters, setRecruiters] = useState([])
-  const [currentUser, setCurrentUser] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [selectedCompany, setSelectedCompany] = useState(null)
-  const [recruiterAdmin, setRecruiterAdmin] = useState(null)
-  const [leadRecruiters, setLeadRecruiters] = useState([])
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
+  const [recruiterAdmin, setRecruiterAdmin] = useState<Recruiter | null>(null)
+  const [leadRecruiters, setLeadRecruiters] = useState<Recruiter[]>([])
   const [isMigrationModalOpen, setIsMigrationModalOpen] = useState(false)
   const [selectedLeadRecruiter, setSelectedLeadRecruiter] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('')
   const [migrationLoading, setMigrationLoading] = useState(false)
-  const [currentRecruiterId, setCurrentRecruiterId] = useState(null);
+  const [currentRecruiterId, setCurrentRecruiterId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true)
 
   const roleMap = {
     0: 'SuperAdmin',
@@ -190,7 +220,7 @@ const RecruiterPage = () => {
         }
       }
 
-      const res = await apiFetch('/users' + (companyId ? `?company_id=${companyId}` : ''), { token });
+      const res = await apiFetch<{ users: any[] }>('/users' + (companyId ? `?company_id=${companyId}` : ''), { token });
 
       const roleMap = {
         0: 'SuperAdmin',
@@ -199,11 +229,11 @@ const RecruiterPage = () => {
         3: 'Recruiter'
       };
 
-      const allUsers = (res.users || []).map(user => ({
+      const allUsers: Recruiter[] = (res.users || []).map((user: any) => ({
         ...user,
         id: user._id,
         uid: user.firebase_uid,
-        role: roleMap[user.role] || 'Unknown',
+        role: roleMap[user.role as keyof typeof roleMap] || 'Unknown',
         name: user.username || user.display_name || 'Unknown',
         region: user.recruiter_region || 'Global',
         phone_number: user.contact || user.phone_number || 'N/A',
@@ -212,13 +242,13 @@ const RecruiterPage = () => {
           : (user.company_name || 'No Company'),
       }));
 
-      if (currentUser.role === 'Lead Recruiter') {
+      if (currentUser?.role === 'Lead Recruiter') {
         const currentUId = currentUser.firebase_uid || currentUser.uid || currentUser._id || currentUser.id;
         const leadProfileInUsers = allUsers.find(u =>
           u.uid === currentUId || u.id === currentUId || u.firebase_uid === currentUId || u._id === currentUId
         );
 
-        const leadData = leadProfileInUsers ? {
+        const leadData: Recruiter | null = leadProfileInUsers ? {
           ...leadProfileInUsers,
           recruiters: allUsers.filter(u => u.id !== leadProfileInUsers.id && u.lead_recruiter_id?.toString() === leadProfileInUsers.id?.toString()),
           recruitersByRegion: {
@@ -237,7 +267,7 @@ const RecruiterPage = () => {
         const leads = allUsers.filter(user => user.role === 'Lead Recruiter');
         const recruiters = allUsers.filter(user => user.role === 'Recruiter');
 
-        const processedLeads = leads.map(lead => {
+        const processedLeads: Recruiter[] = leads.map(lead => {
           const leadRecruiters = recruiters.filter(recruiter =>
             recruiter.lead_recruiter_id?.toString() === lead.id?.toString() ||
             (recruiter.region === lead.region && recruiter.company_name === lead.company_name)
@@ -289,7 +319,7 @@ const RecruiterPage = () => {
     }
   }, [currentUser, leadRecruiters]);
 
-  const processRecruitersData = useCallback((data) => {
+  const processRecruitersData = useCallback((data: Recruiter[]) => {
     if (!currentUser) return [];
 
     if (currentUser.role === 'Recruiter') {
@@ -318,7 +348,7 @@ const RecruiterPage = () => {
       }];
     }
 
-    if (currentUser.role === 'Lead Recruiter') {
+    if (currentUser?.role === 'Lead Recruiter') {
       const leadData = data.find(user =>
         user.id === currentUser.uid ||
         user.uid === currentUser.uid ||
@@ -340,7 +370,7 @@ const RecruiterPage = () => {
     return data;
   }, [currentUser]);
 
-  const getMembersByRegion = useCallback((region) => {
+  const getMembersByRegion = useCallback((region: string) => {
     return selectedRecruiter?.team?.filter(member => member.region.includes(region)) || []
   }, [selectedRecruiter])
 
@@ -348,8 +378,8 @@ const RecruiterPage = () => {
     try {
       setMigrationLoading(true);
 
-      if (!selectedLeadRecruiter || !selectedRegion || !currentRecruiterId) {
-        throw new Error('Please select both lead recruiter and region');
+      if (!selectedLeadRecruiter || !currentRecruiterId) {
+        throw new Error('Please select a lead recruiter');
       }
 
       if (!auth.currentUser) throw new Error('Not authenticated');
@@ -358,8 +388,8 @@ const RecruiterPage = () => {
       await apiFetch(`/users/${currentRecruiterId}`, {
         method: 'PUT',
         token,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+        headers: { 'Content-Type': 'application/json' },
           lead_recruiter_id: selectedLeadRecruiter,
           recruiter_region: selectedRegion
         })
@@ -381,7 +411,7 @@ const RecruiterPage = () => {
     }
   };
 
-  const handleDeleteRecruiter = async (recruiterId, recruiterName, recruiterRole, firebaseUid) => {
+  const handleDeleteRecruiter = async (recruiterId: string, recruiterName: string, recruiterRole: string | number, firebaseUid?: string) => {
     console.log('=== Delete Recruiter Debug ===');
     console.log('Attempting to delete:', { recruiterId, recruiterName, recruiterRole });
 
@@ -434,18 +464,18 @@ const RecruiterPage = () => {
       if (selectedRecruiter?.id === recruiterId) {
         setSelectedRecruiter(null);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting recruiter:', error);
-      toast.error(`Failed to delete recruiter: ${error.message}`);
+      toast.error(`Failed to delete recruiter: ${error.message || 'Unknown error'}`);
     }
   };
 
-  const renderUserCard = (userData) => {
+  const renderUserCard = (userData: Recruiter) => {
     console.log('Rendering user card for:', userData);
 
     // Recruiter Admin should see all users assigned to their company (already filtered by backend)
 
-    if (currentUser.role === 'Lead Recruiter') {
+    if (currentUser?.role === 'Lead Recruiter') {
       const uId = userData.uid || userData.firebase_uid || userData.id || userData._id;
 
       const currentMongoId = currentUser._id || currentUser.id;
@@ -466,7 +496,7 @@ const RecruiterPage = () => {
       return null;
     }
 
-    const handleViewDetails = (e) => {
+    const handleViewDetails = (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       try {
@@ -485,7 +515,7 @@ const RecruiterPage = () => {
     };
 
     return (
-      <div className="group relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+      <div className="group/card relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
         {/* Background Pattern */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary-500/5 to-accent-500/5 dark:from-primary-500/10 dark:to-accent-500/10" />
 
@@ -502,14 +532,14 @@ const RecruiterPage = () => {
           <button
             type="button"
             onClick={handleViewDetails}
-            className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/50 text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all duration-200 group relative cursor-pointer"
+            className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/50 text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all duration-200 group/btn relative cursor-pointer"
             title="View Details"
             style={{ zIndex: 20 }}
           >
             <div className="relative flex items-center justify-center">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="w-4 h-4 transform group-hover:scale-110 transition-transform duration-200"
+                className="w-4 h-4 transform group-hover/btn:scale-110 transition-transform duration-200"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -524,7 +554,7 @@ const RecruiterPage = () => {
               </svg>
 
               {/* Tooltip */}
-              <span className="absolute -bottom-8 right-0 min-w-max px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              <span className="absolute -bottom-8 right-0 min-w-max px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-lg opacity-0 group-hover/btn:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
                 View Details
               </span>
             </div>
@@ -550,7 +580,7 @@ const RecruiterPage = () => {
                 setCurrentRecruiterId(userData.uid || userData.id);
                 setIsMigrationModalOpen(true);
               }}
-              className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/50 text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all duration-200 group relative cursor-pointer ml-2"
+              className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-primary-50 dark:hover:bg-primary-900/50 text-gray-500 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-all duration-200 group/migrate relative cursor-pointer ml-2"
               title="Migrate Recruiter"
             >
               <svg
@@ -567,7 +597,7 @@ const RecruiterPage = () => {
                   d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
                 />
               </svg>
-              <span className="absolute -bottom-8 right-0 min-w-max px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
+              <span className="absolute -bottom-8 right-0 min-w-max px-2 py-1 text-xs font-medium text-white bg-gray-900 rounded-lg opacity-0 group-hover/migrate:opacity-100 transition-opacity duration-200 pointer-events-none z-50">
                 Migrate Recruiter
               </span>
             </button>
@@ -649,7 +679,7 @@ const RecruiterPage = () => {
         </div>
 
         {/* Hover Effect Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-500/0 to-accent-500/0 opacity-0 group-hover:opacity-5 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-500/0 to-accent-500/0 opacity-0 group-hover/card:opacity-5 transition-opacity duration-300" />
       </div>
     );
   };
@@ -941,12 +971,12 @@ const RecruiterPage = () => {
                   </button>
                   <button
                     type="button"
-                    className={`inline-flex justify-center rounded-lg px-4 py-2 text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${!selectedLeadRecruiter || !selectedRegion || migrationLoading
+                    className={`inline-flex justify-center rounded-lg px-4 py-2 text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${!selectedLeadRecruiter || migrationLoading
                       ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-primary-600 hover:bg-primary-700'
                       }`}
                     onClick={handleMigrateRecruiter}
-                    disabled={!selectedLeadRecruiter || !selectedRegion || migrationLoading}
+                    disabled={!selectedLeadRecruiter || migrationLoading}
                   >
                     {migrationLoading ? (
                       <div className="flex items-center">

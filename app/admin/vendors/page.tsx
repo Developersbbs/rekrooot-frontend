@@ -15,7 +15,7 @@ type Vendor = {
     createdAt?: string
     createdBy?: {
         _id: string
-      username: string
+        username: string
         email: string
     }
     candidateCount?: number
@@ -28,7 +28,7 @@ const VendorPage = () => {
         vendorName: '',
         email: '',
         contactNumber: '',
-        status: 'Active'
+        status: '0'
     })
     const [selectedCompany, setSelectedCompany] = useState<any>(null)
     const [isEditMode, setIsEditMode] = useState(false)
@@ -145,7 +145,7 @@ const VendorPage = () => {
                 vendorName: '',
                 email: '',
                 contactNumber: '',
-                status: 'Active'
+                status: '0'
             })
         } catch (error) {
             console.error('Error saving vendor:', error)
@@ -198,7 +198,7 @@ const VendorPage = () => {
             vendorName: '',
             email: '',
             contactNumber: '',
-            status: 'Active'
+            status: '0'
         })
         setIsEditMode(false)
         setIsModalOpen(true)
@@ -232,11 +232,11 @@ const VendorPage = () => {
                             className="group bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 p-6 border border-gray-100 dark:border-gray-700 relative overflow-hidden"
                         >
                             <div className="absolute top-4 right-4">
-                                <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${vendor.status === 'Active'
+                                <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${vendor.status === '0'
                                     ? 'bg-green-50 text-green-600 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
                                     : 'bg-red-50 text-red-600 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
                                     }`}>
-                                    {vendor.status}
+                                    {vendor.status === '0' ? 'Active' : 'Inactive'}
                                 </span>
                             </div>
 
@@ -369,8 +369,8 @@ const VendorPage = () => {
                                         onChange={e => setFormData({ ...formData, status: e.target.value })}
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 dark:bg-gray-700/50 dark:text-white focus:ring-2 focus:ring-accent-500 focus:border-transparent"
                                     >
-                                        <option value="Active">Active</option>
-                                        <option value="Inactive">Inactive</option>
+                                        <option value="0">Active</option>
+                                        <option value="1">Inactive</option>
                                     </select>
                                 </div>
 

@@ -10,11 +10,16 @@ import Cookies from 'js-cookie'
 import { apiFetch } from '@/lib/api'
 
 // Memoize child components
-const DocumentList = memo(({ documents, removeDocument }) => (
+interface DocumentListProps {
+  documents: any[];
+  removeDocument: (index: number) => void;
+}
+
+const DocumentList = memo(({ documents, removeDocument }: DocumentListProps) => (
   <div className="mt-2 max-h-[100px] overflow-y-auto">
     {documents.map((doc, index) => (
       <div key={index} className="flex items-center justify-between py-1 text-sm group hover:bg-gray-50 dark:hover:bg-gray-700">
-        <span className="truncate max-w-[250px] text-gray-600 dark:text-gray-300">{doc.name}</span>
+        <span className="truncate max-w-[250px] text-gray-600 dark:text-gray-300">{doc.name || (typeof doc === 'string' ? doc.split('/').pop() : 'Document')}</span>
         <button
           type="button"
           onClick={() => removeDocument(index)}
@@ -29,6 +34,18 @@ const DocumentList = memo(({ documents, removeDocument }) => (
 
 DocumentList.displayName = 'DocumentList'
 
+interface AddNewCandidateProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedJob?: any;
+  selectedClient?: any;
+  showClientJobDropdowns?: boolean;
+  onCandidateAdded: () => void;
+  candidateData?: any;
+  isEditing?: boolean;
+  prefilledJobData?: any;
+}
+
 const AddNewCandidate = ({
   isOpen,
   onClose,
@@ -39,35 +56,35 @@ const AddNewCandidate = ({
   candidateData = null,
   isEditing = false,
   prefilledJobData = null
-}) => {
-  const [user, setUser] = useState(null)
+}: AddNewCandidateProps) => {
+  const [user, setUser] = useState<any>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [vendors, setVendors] = useState([])
-  const [jobs, setJobs] = useState([])
-  const [clients, setClients] = useState([])
-  const [interviewers, setInterviewers] = useState([])
-  const [profilePreview, setProfilePreview] = useState(null)
-  const [resume, setResume] = useState([])
-  const [supportingDocuments, setSupportingDocuments] = useState([])
-  const [filteredJobs, setFilteredJobs] = useState([])
-  const [currentSelectedJob, setCurrentSelectedJob] = useState(selectedJob)
-  const [currentSelectedClient, setCurrentSelectedClient] = useState(selectedClient)
-  const [selectedFiles, setSelectedFiles] = useState([])
-  const [previewUrl, setPreviewUrl] = useState(null)
+  const [vendors, setVendors] = useState<any[]>([])
+  const [jobs, setJobs] = useState<any[]>([])
+  const [clients, setClients] = useState<any[]>([])
+  const [interviewers, setInterviewers] = useState<any[]>([])
+  const [profilePreview, setProfilePreview] = useState<string | null>(null)
+  const [resume, setResume] = useState<any[]>([])
+  const [supportingDocuments, setSupportingDocuments] = useState<any[]>([])
+  const [filteredJobs, setFilteredJobs] = useState<any[]>([])
+  const [currentSelectedJob, setCurrentSelectedJob] = useState<any>(selectedJob)
+  const [currentSelectedClient, setCurrentSelectedClient] = useState<any>(selectedClient)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
-  const [duplicateCandidates, setDuplicateCandidates] = useState([])
+  const [duplicateCandidates, setDuplicateCandidates] = useState<any[]>([])
   const [companyValidationError, setCompanyValidationError] = useState('')
   const [interviewerSearchTerm, setInterviewerSearchTerm] = useState('')
   const [showInterviewerDropdown, setShowInterviewerDropdown] = useState(false)
-  const [filteredInterviewers, setFilteredInterviewers] = useState([])
-  const [availableTimeSlots, setAvailableTimeSlots] = useState([])
+  const [filteredInterviewers, setFilteredInterviewers] = useState<any[]>([])
+  const [availableTimeSlots, setAvailableTimeSlots] = useState<any[]>([])
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('')
   const [showTimeSlotDropdown, setShowTimeSlotDropdown] = useState(false)
   const [isLoadingTimeSlots, setIsLoadingTimeSlots] = useState(false)
-  const [selectedSlotData, setSelectedSlotData] = useState(null)
+  const [selectedSlotData, setSelectedSlotData] = useState<any>(null)
   const [isParsing, setIsParsing] = useState(false)
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<any>({
     profilePic: null,
     name: '',
     email: '',
@@ -88,18 +105,30 @@ const AddNewCandidate = ({
 
 
   useEffect(() => {
-    if (formData.clientId) {
-      const jobsForClient = jobs.filter(job => job.clientId === formData.clientId);
-      // Filter to show only active jobs
-      const activeJobsForClient = jobsForClient.filter(job => job.status === '0');
-      setFilteredJobs(activeJobsForClient);
-      setFormData(prev => ({ ...prev, jobId: '' }))
-    } else {
-      // Filter to show only active jobs when no client is selected
-      const activeJobs = jobs.filter(job => job.status === '0');
-      setFilteredJobs(activeJobs);
-    }
-  }, [formData.clientId, jobs])
+    const filterJobs = () => {
+      let filtered: any[] = [];
+      const currentJobId = formData.jobId;
+
+      if (formData.clientId) {
+        const jobsForClient = jobs.filter(job => job.clientId === formData.clientId);
+        // Show active jobs OR the candidate's current job
+        filtered = jobsForClient.filter(job => job.status === '0' || job.id === currentJobId);
+      } else {
+        // Show all active jobs when no client is selected
+        filtered = jobs.filter(job => job.status === '0' || job.id === currentJobId);
+      }
+
+      setFilteredJobs(filtered);
+
+      // Only reset jobId if the current jobId is NOT in the new filtered list
+      // AND we are not in the middle of initializing (i.e. if it's a manual client change)
+      if (currentJobId && !filtered.some(j => j.id === currentJobId)) {
+        setFormData((prev: any) => ({ ...prev, jobId: '' }));
+      }
+    };
+
+    filterJobs();
+  }, [formData.clientId, jobs, formData.jobId])
 
   const fetchData = useCallback(async () => {
     try {
@@ -113,52 +142,32 @@ const AddNewCandidate = ({
 
       // Fetch all data from backend
       const [vendorsRes, jobsRes, clientsRes, interviewersRes] = await Promise.all([
-        apiFetch(`/vendors${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token }),
-        apiFetch(`/jobs${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token }),
-        apiFetch(`/clients${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token }),
-        apiFetch('/interviewers', { token }) // Interviewers are global
+        apiFetch<any>(`/vendors${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token }),
+        apiFetch<any>(`/jobs${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token }),
+        apiFetch<any>(`/clients${companyId !== 'all' ? `?company_id=${companyId}` : ''}`, { token }),
+        apiFetch<any>('/interviewers', { token }) // Interviewers are global
       ]);
 
-      setVendors(vendorsRes.vendors || []);
+      setVendors((vendorsRes.vendors || []).map((v: any) => ({
+        ...v,
+        id: v._id || v.id,
+        vendorName: v.vendorName || v.name
+      })));
 
-      const mappedJobs = (jobsRes.jobs || []).map(j => ({
+      const mappedJobs = (jobsRes.jobs || []).map((j: any) => ({
         ...j,
         id: j._id,
         clientId: j.client_id?._id || j.client_id
       }));
       setJobs(mappedJobs);
 
-      setClients((clientsRes.clients || []).map(c => ({ ...c, id: c._id })));
-      setInterviewers((interviewersRes.interviewers || []).map(i => ({ ...i, id: i._id })));
-
-      // Update filtered jobs if there's a selected client or prefilled job
-      const clientId = selectedJob?.clientId || prefilledJobData?.clientId || formData.clientId;
-      console.log('Job filtering debug:', {
-        clientId,
-        selectedJobStatus: selectedJob?.status,
-        prefilledJobStatus: prefilledJobData?.status,
-        totalJobs: mappedJobs.length,
-        mappedJobsSample: mappedJobs.slice(0, 3).map(j => ({ id: j.id, status: j.status, title: j.title || j.jobTitle }))
-      });
-      
-      if (clientId) {
-        const jobsForClient = mappedJobs.filter(job => job.clientId === clientId);
-        // Filter to show only active jobs
-        const activeJobsForClient = jobsForClient.filter(job => job.status === '0');
-        console.log('Client filtering:', { clientId, jobsForClient: jobsForClient.length, activeJobsForClient: activeJobsForClient.length });
-        setFilteredJobs(activeJobsForClient);
-        setFormData(prev => ({ ...prev, jobId: '' }))
-      } else {
-        // Filter to show only active jobs when no client is selected
-        const activeJobs = mappedJobs.filter(job => job.status === '0');
-        console.log('No client filtering:', { activeJobs: activeJobs.length });
-        setFilteredJobs(activeJobs);
-      }
+      setClients((clientsRes.clients || []).map((c: any) => ({ ...c, id: c._id })));
+      setInterviewers((interviewersRes.interviewers || []).map((i: any) => ({ ...i, id: i._id })));
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load data');
     }
-  }, [prefilledJobData, selectedJob, formData.clientId]);
+  }, [prefilledJobData, selectedJob]);
 
   // Add effect to refetch data when company changes
   useEffect(() => {
@@ -181,7 +190,6 @@ const AddNewCandidate = ({
     fetchData()
   }, [fetchData])
 
-  // Filter interviewers based on search term
   useEffect(() => {
     const filtered = interviewers.filter(interviewer => {
       const searchLower = interviewerSearchTerm.toLowerCase()
@@ -816,14 +824,14 @@ const AddNewCandidate = ({
     setAvailableTimeSlots([]);
   };
 
-  const handleFormChange = useCallback((field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+  const handleFormChange = useCallback((field: string, value: any) => {
+    setFormData((prev: any) => ({ ...prev, [field]: value }))
   }, [])
 
-  const handleClientChange = (clientId) => {
+  const handleClientChange = (clientId: string) => {
     const client = clients.find(client => client.id === clientId)
     setCurrentSelectedClient(client)
-    setFormData(prev => ({ ...prev, clientId }))
+    setFormData((prev: any) => ({ ...prev, clientId }))
   }
 
   const handleJobChange = (jobId) => {
@@ -882,6 +890,14 @@ const AddNewCandidate = ({
   // Update the useEffect for editing mode to properly handle file data
   useEffect(() => {
     if (isEditing && candidateData) {
+      const extractId = (val: any) => {
+        if (!val) return '';
+        if (typeof val === 'string') return val;
+        if (val._id) return typeof val._id === 'object' ? (val._id.$oid || val._id) : val._id;
+        if (val.$oid) return val.$oid;
+        return val;
+      };
+
       setFormData({
         ...candidateData,
         // Don't convert existing profilePic URL to File object
@@ -891,10 +907,10 @@ const AddNewCandidate = ({
         location: candidateData.location || '',
         primaryContact: candidateData.primary_contact || '',
         secondaryContact: candidateData.secondary_contact || '',
-        vendorId: candidateData.vendor_id || '',
-        jobId: candidateData.job_id || '',
-        clientId: candidateData.client_id || '',
-        interviewerId: candidateData.interviewer_id || '',
+        vendorId: extractId(candidateData.vendor_id),
+        jobId: extractId(candidateData.job_id),
+        clientId: extractId(candidateData.client_id),
+        interviewerId: extractId(candidateData.interviewer_id),
         final_status: candidateData.final_status ?? null,
         is_active: candidateData.is_active ?? true,
         experience: candidateData.experience_years || ''
@@ -915,10 +931,12 @@ const AddNewCandidate = ({
 
       // Set client and job selections
       if (candidateData.client_id) {
-        setCurrentSelectedClient(clients.find(client => client.id === candidateData.client_id));
+        const cId = extractId(candidateData.client_id);
+        setCurrentSelectedClient(clients.find(client => (client.id || client._id) === cId));
       }
       if (candidateData.job_id) {
-        setCurrentSelectedJob(jobs.find(job => job.id === candidateData.job_id));
+        const jId = extractId(candidateData.job_id);
+        setCurrentSelectedJob(jobs.find(job => (job.id || job._id) === jId));
       }
 
       // Set interviewer search term if interviewer is selected
@@ -939,7 +957,7 @@ const AddNewCandidate = ({
         });
       }
     }
-  }, [isEditing, candidateData, clients, jobs, interviewers]);
+  }, [isEditing, candidateData, isOpen, clients, jobs, interviewers]);
 
   useEffect(() => {
     if (prefilledJobData || selectedJob) {
@@ -1188,11 +1206,13 @@ const AddNewCandidate = ({
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                     >
                       <option value="">Select a vendor</option>
-                      {vendors.map(vendor => (
-                        <option key={vendor.id} value={vendor.id}>
-                          {vendor.vendorName}
-                        </option>
-                      ))}
+                      {vendors
+                        .filter(v => v.status === '0' || v.id === formData.vendorId)
+                        .map(vendor => (
+                          <option key={vendor.id} value={vendor.id}>
+                            {vendor.vendorName}
+                          </option>
+                        ))}
                     </select>
                   </div>
 

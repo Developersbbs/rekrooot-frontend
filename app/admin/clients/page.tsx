@@ -33,29 +33,6 @@ const ClientsPage = () => {
     const [selectedCompany, setSelectedCompany] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
 
-
-
-    const fetchClients = async () => {
-        try {
-            setIsLoading(true)
-            const token = await auth.currentUser?.getIdToken()
-            if (!token) return
-
-            let url = '/clients'
-            if (selectedCompany?.id && selectedCompany.id !== 'all') {
-                url += `?company_id=${selectedCompany.id}`
-            }
-
-            const res = await apiFetch<{ clients: Client[] }>(url, { token })
-            setClients(res.clients)
-        } catch (error) {
-            console.error('Error fetching clients:', error)
-            toast.error('Failed to fetch clients')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
     useEffect(() => {
         const loadInitialCompany = () => {
             const savedCompany = localStorage.getItem('selectedCompany');
