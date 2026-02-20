@@ -1,10 +1,12 @@
 'use client'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
 import { apiFetch } from '@/lib/api'
 import { auth } from '@/lib/firebase'
+import CreateClient from '@/components/createClient'
+import { FiX, FiBriefcase, FiMail, FiPhone, FiUpload } from 'react-icons/fi'
 
 type Client = {
     _id: string;
@@ -18,13 +20,6 @@ type Client = {
 const ClientsPage = () => {
     const [clients, setClients] = useState<Client[]>([])
     const [isModalOpen, setIsModalOpen] = useState(false)
-    const [newClient, setNewClient] = useState({
-        name: '',
-        email: '',
-        contact: '',
-        logo: '',
-    })
-    const [logoPreview, setLogoPreview] = useState<string | null>(null)
     const [selectedClient, setSelectedClient] = useState<Client | null>(null)
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
     const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -120,75 +115,6 @@ const ClientsPage = () => {
         };
     }, [companyIdForFetch])
 
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [isUploading, setIsUploading] = useState(false);
-
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setSelectedFile(file);
-            setLogoPreview(URL.createObjectURL(file));
-        }
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-
-        if (!newClient.name) {
-            toast.error('Client name is required')
-            return
-        }
-
-        try {
-            setIsUploading(true);
-            const token = await auth.currentUser?.getIdToken()
-            if (!token) return
-
-            let logoUrl = newClient.logo;
-
-            if (selectedFile) {
-                try {
-                    const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-                    const { storage } = await import('@/lib/firebase');
-
-                    const storageRef = ref(storage, `clients/${Date.now()}_${selectedFile.name}`);
-                    const snapshot = await uploadBytes(storageRef, selectedFile);
-                    logoUrl = await getDownloadURL(snapshot.ref);
-                } catch (uploadError) {
-                    console.error("Error uploading image:", uploadError);
-                    toast.error("Failed to upload image. Please try again.");
-                    setIsUploading(false);
-                    return;
-                }
-            }
-
-            const payload = {
-                ...newClient,
-                logo: logoUrl,
-                company_id: selectedCompany?.id === 'all' ? undefined : selectedCompany?.id
-            }
-
-            const res = await apiFetch<{ client: Client }>('/clients', {
-                method: 'POST',
-                token,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-
-            setClients(prev => [res.client, ...prev])
-            setIsModalOpen(false)
-            setNewClient({ name: '', email: '', contact: '', logo: '' })
-            setLogoPreview(null)
-            setSelectedFile(null);
-            toast.success('Client added successfully')
-        } catch (error) {
-            console.error('Error adding client:', error)
-            toast.error('Failed to add client')
-        } finally {
-            setIsUploading(false);
-        }
-    }
-
     const [editLogoPreview, setEditLogoPreview] = useState<string | null>(null)
     const [editSelectedFile, setEditSelectedFile] = useState<File | null>(null)
     const [isEditUploading, setIsEditUploading] = useState(false)
@@ -283,7 +209,7 @@ const ClientsPage = () => {
         const isValidId = selectedCompany?.id && (selectedCompany.id !== 'all') && /^[0-9a-fA-F]{24}$/.test(selectedCompany.id);
 
         if (!isValidId) {
-            toast.error('Please select a specific, valid company before adding a client')
+            toast.error('Please select a specific company before adding a client')
             return
         }
         setIsModalOpen(true)
@@ -291,7 +217,6 @@ const ClientsPage = () => {
 
     return (
         <div className="p-6 min-h-screen">
-
 
             <div className="flex justify-between items-center mb-12">
                 <h1 className="text-4xl font-bold text-gray-800 dark:text-gray-100">
@@ -313,10 +238,8 @@ const ClientsPage = () => {
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {clients.map((client) => (
-                        <motion.div
+                        <div
                             key={client._id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
                             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md 
                          transition-all duration-300 border border-gray-100 dark:border-gray-700"
                         >
@@ -382,12 +305,11 @@ const ClientsPage = () => {
                                     </button>
                                 </div>
                             </div>
-                        </motion.div>
+                        </div>
                     ))}
                 </div>
             )}
 
-            {/* Sidebar Details */}
             {isSidebarOpen && (
                 <div className="fixed inset-0 z-50 overflow-hidden">
                     <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)} />
@@ -416,106 +338,159 @@ const ClientsPage = () => {
                 </div>
             )}
 
-            {/* Edit Modal */}
             {isEditModalOpen && editingClient && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsEditModalOpen(false)} />
-                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative bg-white dark:bg-gray-900 rounded-2xl p-8 w-full max-w-md shadow-2xl">
-                        <h2 className="text-2xl font-bold mb-6 dark:text-white">Edit Client</h2>
-                        <form onSubmit={handleEditSubmit} className="space-y-4">
-                            <input
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                placeholder="Name"
-                                value={editingClient.name}
-                                onChange={e => setEditingClient({ ...editingClient, name: e.target.value })}
-                            />
-                            <input
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                placeholder="Email"
-                                value={editingClient.email}
-                                onChange={e => setEditingClient({ ...editingClient, email: e.target.value })}
-                            />
-                            <input
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                placeholder="Contact"
-                                value={editingClient.contact}
-                                onChange={e => setEditingClient({ ...editingClient, contact: e.target.value })}
-                            />
-                            <div className="flex items-center gap-4">
-                                <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg transition-colors text-sm font-medium">
-                                    <span>Upload Logo</span>
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleEditFileSelect} />
-                                </label>
-                                {editLogoPreview && (
-                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                                        <img src={editLogoPreview} alt="Preview" className="w-full h-full object-cover" />
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800 relative">
+                        {/* Modal Header */}
+                        <div className="relative h-28 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+                            <div className="absolute -bottom-8 left-8">
+                                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-lg border border-gray-200 dark:border-gray-700">
+                                    <FiBriefcase className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsEditModalOpen(false)}
+                                disabled={isEditUploading}
+                                className="absolute top-4 right-4 text-gray-400 hover:text-white rounded-full p-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <FiX className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="px-8 pt-14 pb-8">
+                            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-2">
+                                Edit Client
+                            </h2>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">
+                                Update the client details below
+                            </p>
+
+                            <form onSubmit={handleEditSubmit} className="space-y-4">
+                                <div className="space-y-1">
+                                    <label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Client Name *
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            id="edit-name"
+                                            value={editingClient.name}
+                                            onChange={e => setEditingClient({ ...editingClient, name: e.target.value })}
+                                            disabled={isEditUploading}
+                                            className="w-full px-4 py-2.5 pl-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 ease-in-out text-sm"
+                                            placeholder="Enter client name"
+                                            required
+                                        />
+                                        <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <FiBriefcase className="h-4 w-4 text-gray-400" />
+                                        </div>
                                     </div>
-                                )}
-                            </div>
-                            <div className="flex gap-3 pt-4">
-                                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors">Cancel</button>
-                                <button
-                                    type="submit"
-                                    disabled={isEditUploading}
-                                    className="flex-1 py-3 bg-primary text-white rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex justify-center items-center gap-2"
-                                >
-                                    {isEditUploading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                    {isEditUploading ? 'Uploading...' : 'Save Changes'}
-                                </button>
-                            </div>
-                        </form>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label htmlFor="edit-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Email Address
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            id="edit-email"
+                                            type="email"
+                                            value={editingClient.email}
+                                            onChange={e => setEditingClient({ ...editingClient, email: e.target.value })}
+                                            disabled={isEditUploading}
+                                            className="w-full px-4 py-2.5 pl-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 ease-in-out text-sm"
+                                            placeholder="client@example.com"
+                                        />
+                                        <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <FiMail className="h-4 w-4 text-gray-400" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label htmlFor="edit-contact" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Contact Number
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            id="edit-contact"
+                                            type="text"
+                                            value={editingClient.contact}
+                                            onChange={e => setEditingClient({ ...editingClient, contact: e.target.value })}
+                                            disabled={isEditUploading}
+                                            className="w-full px-4 py-2.5 pl-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 ease-in-out text-sm"
+                                            placeholder="Enter contact number"
+                                        />
+                                        <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                                            <FiPhone className="h-4 w-4 text-gray-400" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        Client Logo
+                                    </label>
+                                    <div className="flex items-center gap-4 mt-1">
+                                        <label
+                                            className={`flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors text-sm font-medium border border-gray-200 dark:border-gray-700 cursor-pointer ${isEditUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                                        >
+                                            <FiUpload className="w-4 h-4" />
+                                            Upload Image
+                                            <input type="file" className="hidden" accept="image/*" onChange={handleEditFileSelect} disabled={isEditUploading} />
+                                        </label>
+                                        {editLogoPreview && (
+                                            <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm">
+                                                <img src={editLogoPreview} alt="Preview" className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setEditSelectedFile(null);
+                                                        setEditLogoPreview(null);
+                                                        setEditingClient({ ...editingClient, logo: '' });
+                                                    }}
+                                                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 shadow-md flex items-center justify-center cursor-pointer pointer-events-auto"
+                                                >
+                                                    <FiX className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col space-y-3 pt-6">
+                                    <motion.button
+                                        whileHover={{ scale: 1.01 }}
+                                        whileTap={{ scale: 0.99 }}
+                                        type="submit"
+                                        disabled={isEditUploading}
+                                        className="w-full px-4 py-2.5 text-white font-medium bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 shadow-sm shadow-orange-500/20 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm flex justify-center items-center gap-2 cursor-pointer"
+                                    >
+                                        {isEditUploading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                                        {isEditUploading ? 'Saving...' : 'Save Changes'}
+                                    </motion.button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsEditModalOpen(false)}
+                                        disabled={isEditUploading}
+                                        className="w-full px-4 py-2.5 font-medium text-sm text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </motion.div>
                 </div>
             )}
 
-            {/* Add Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
                     <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative bg-white dark:bg-gray-900 rounded-2xl p-8 w-full max-w-md shadow-2xl">
                         <h2 className="text-2xl font-bold mb-6 dark:text-white">Add New Client</h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <input
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                placeholder="Name"
-                                value={newClient.name}
-                                onChange={e => setNewClient({ ...newClient, name: e.target.value })}
-                            />
-                            <input
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                placeholder="Email"
-                                value={newClient.email}
-                                onChange={e => setNewClient({ ...newClient, email: e.target.value })}
-                            />
-                            <input
-                                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                                placeholder="Contact"
-                                value={newClient.contact}
-                                onChange={e => setNewClient({ ...newClient, contact: e.target.value })}
-                            />
-                            <div className="flex items-center gap-4">
-                                <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg transition-colors text-sm font-medium">
-                                    <span>Upload Logo</span>
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
-                                </label>
-                                {logoPreview && (
-                                    <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                                        <img src={logoPreview} alt="Preview" className="w-full h-full object-cover" />
-                                    </div>
-                                )}
-                            </div>
-                            <div className="flex gap-3 pt-4">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 rounded-xl transition-colors">Cancel</button>
-                                <button
-                                    type="submit"
-                                    disabled={isUploading}
-                                    className="flex-1 py-3 bg-primary text-white rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex justify-center items-center gap-2"
-                                >
-                                    {isUploading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                                    {isUploading ? 'Uploading...' : 'Add Client'}
-                                </button>
-                            </div>
-                        </form>
+                        <CreateClient onClose={() => setIsModalOpen(false)} companyId={selectedCompany?.id} />
                     </motion.div>
                 </div>
             )}

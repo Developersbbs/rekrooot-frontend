@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { Suspense } from "react";
 import Snowfall from "../../components/Snowfall";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ type InvitationDto = {
   expires_at: string;
 };
 
-export default function CreateAccount() {
+function CreateAccountComponent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { theme, setTheme } = useTheme();
@@ -315,7 +316,7 @@ export default function CreateAccount() {
               <div className="text-center">
                 <button
                   type="button"
-                  onClick={() => router.push("/login")}
+                  onClick={() => router.push("/")}
                   className="text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
                   Already have an account? Sign in
@@ -348,5 +349,13 @@ export default function CreateAccount() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function CreateAccount() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <CreateAccountComponent />
+    </Suspense>
   );
 }

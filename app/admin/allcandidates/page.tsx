@@ -40,9 +40,8 @@ const AllCandidates = () => {
     setMounted(true)
   }, [])
 
-  // Listen for company changes
   useEffect(() => {
-    const handleCompanyChange = (event) => {
+    const handleCompanyChange = (event: any) => {
       setSelectedCompany(event.detail)
     }
 
@@ -59,11 +58,10 @@ const AllCandidates = () => {
     return () => window.removeEventListener('companyChanged', handleCompanyChange)
   }, [])
 
-  // Handle data fetching when user or company changes
   useEffect(() => {
     let cancelled = false
 
-    const fetchData = async (user) => {
+    const fetchData = async (user: any) => {
       if (!user) {
         setLoading(false)
         return
@@ -73,9 +71,8 @@ const AllCandidates = () => {
         setLoading(true)
         const token = await user.getIdToken()
 
-        // Load user data if not already loaded
         if (!userData) {
-          const profileRes = await apiFetch('/auth/me', { token })
+          const profileRes = await apiFetch('/auth/me', { token }) as any
           if (profileRes?.user && !cancelled) {
             setUserData(profileRes.user)
           }
@@ -91,7 +88,7 @@ const AllCandidates = () => {
           apiFetch(`/jobs${queryParams}`, { token }),
           apiFetch(`/clients${queryParams}`, { token }),
           apiFetch(`/candidates${queryParams}`, { token })
-        ])
+        ]) as any[]
 
         if (!cancelled) {
           setVendors(vendorsRes.vendors || [])
@@ -131,7 +128,7 @@ const AllCandidates = () => {
         queryParams = `?company_id=${selectedCompany.id}`
       }
 
-      const res = await apiFetch(`/candidates${queryParams}`, { token })
+      const res = await apiFetch(`/candidates${queryParams}`, { token }) as any
       setCandidates(res.candidates || [])
     } catch (error) {
       console.error('Error fetching candidates:', error)
@@ -147,7 +144,7 @@ const AllCandidates = () => {
     setIsDialogOpen(true)
   }, [selectedCompany])
 
-  const handleMoveToTrash = useCallback(async (candidateId) => {
+  const handleMoveToTrash = useCallback(async (candidateId: any) => {
     try {
       if (!auth.currentUser) return
 
@@ -178,7 +175,7 @@ const AllCandidates = () => {
     }
   }, [candidates, fetchCandidatesData])
 
-  const handleEdit = useCallback((candidate) => {
+  const handleEdit = useCallback((candidate: any) => {
     const extractId = (val: any) => {
       if (!val) return '';
       if (typeof val === 'string') return val;
@@ -211,7 +208,7 @@ const AllCandidates = () => {
     setIsEditDialogOpen(true)
   }, [])
 
-  const handleEditSubmit = useCallback(async (updatedData) => {
+  const handleEditSubmit = useCallback(async (updatedData: any) => {
     try {
       if (!auth.currentUser) return
       const token = await auth.currentUser.getIdToken()
@@ -263,7 +260,7 @@ const AllCandidates = () => {
     }
   }, [])
 
-  const handleCancelMeeting = useCallback(async (candidate) => {
+  const handleCancelMeeting = useCallback(async (candidate: any) => {
     if (!window.confirm(`Are you sure you want to cancel the interview for ${candidate?.full_name}?`)) {
       return;
     }
@@ -301,11 +298,10 @@ const AllCandidates = () => {
         body: JSON.stringify({
           final_status: null,
           interview_id: null,
-          status: 5 // 5: cancelled
+          status: 5
         })
       });
 
-      // Send cancellation email
       try {
         await apiFetch('/emails/send-interview-slot', {
           method: 'POST',
@@ -328,30 +324,28 @@ const AllCandidates = () => {
       fetchCandidatesData();
     } catch (error) {
       console.error('Error cancelling interview:', error);
-      toast.error('Failed to cancel: ' + error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Failed to cancel: ' + errorMessage);
     } finally {
       setIsSubmittingAction(false);
     }
   }, [fetchCandidatesData, isSubmittingAction])
 
 
-  const handleViewProfile = (candidateId) => {
+  const handleViewProfile = (candidateId: any) => {
     setSelectedCandidateId(candidateId)
     setIsProfileOpen(true)
   }
 
-  const handleReschedule = useCallback((candidate) => {
+  const handleReschedule = useCallback((candidate: any) => {
     setReschedulingCandidate(candidate)
     setIsRescheduleOpen(true)
   }, [])
 
-  // Derive a display status string from the candidate object
   const getCandidateDisplayStatus = (candidate: any): string => {
-    // 1. Check for specific result/outcome on the candidate object
     if (candidate.final_status) return candidate.final_status.toUpperCase();
     if (candidate.result) return candidate.result.toUpperCase();
 
-    // 2. Use candidate's own status field
     const candidateStatusMap: { [key: number]: string } = {
       0: 'WAITING',
       1: 'SCHEDULED',
@@ -365,7 +359,6 @@ const AllCandidates = () => {
       return candidateStatusMap[candidate.status];
     }
 
-    // 3. Fallback to interview status (legacy/consistency check)
     const interviewStatus = candidate.interview_id?.status;
     const resultStatusMap: { [key: number]: string } = {
       3: 'SELECTED',

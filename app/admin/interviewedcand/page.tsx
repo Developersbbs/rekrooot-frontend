@@ -13,8 +13,8 @@ const InterviewedCand = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [selectedCandidateId, setSelectedCandidateId] = useState(null);
-  const [selectedCompany, setSelectedCompany] = useState(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<{ id: string; [key: string]: any } | null>(null);
 
   const resultLabels: { [key: string]: string } = {
     '1': 'Selected',
@@ -26,8 +26,9 @@ const InterviewedCand = () => {
   };
 
   useEffect(() => {
-    const handleCompanyChange = (event) => {
-      setSelectedCompany(event.detail);
+    const handleCompanyChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      setSelectedCompany(customEvent.detail);
     };
 
     const selectedCompanyStr = localStorage.getItem('selectedCompany');
@@ -52,11 +53,11 @@ const InterviewedCand = () => {
         queryParams = `?company_id=${selectedCompany.id}`;
       }
 
-      const res = await apiFetch(`/candidates${queryParams}`, { token });
+      const res = await apiFetch(`/candidates${queryParams}`, { token }) as { candidates: any[] };
       if (res?.candidates) {
         // Filter for candidates who have a final status (meaning they've been interviewed and reviewed)
         // or have status 4 (INTERVIEWED) and are not trashed
-        const interviewed = res.candidates.filter(c => (c.result || c.status === 4) && !c.trash);
+        const interviewed = res.candidates.filter((c: any) => (c.result || c.status === 4) && !c.trash);
         setCandidates(interviewed);
       }
     } catch (error) {
@@ -84,7 +85,7 @@ const InterviewedCand = () => {
     };
   }, [fetchCandidatesData]);
 
-  const handleDelete = async (candidateId) => {
+  const handleDelete = async (candidateId: string) => {
     if (!auth.currentUser) return;
     try {
       const token = await auth.currentUser.getIdToken();
@@ -104,7 +105,7 @@ const InterviewedCand = () => {
     }
   };
 
-  const handleViewProfile = (candidateId) => {
+  const handleViewProfile = (candidateId: string) => {
     setSelectedCandidateId(candidateId);
     setIsProfileOpen(true);
   };

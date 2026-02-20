@@ -12,7 +12,6 @@ import {
   FiFileText,
   FiX,
   FiUser,
-  FiTrash,
   FiTrash2,
   FiBarChart,
   FiUserCheck,
@@ -24,7 +23,7 @@ import type { IconType } from 'react-icons';
 import CreateCompany from './createCompany';
 import { AnimatePresence } from 'framer-motion';
 import NewUser from './newUser';
-
+import CreateClient from './createClient';
 
 
 type SidebarProps = {
@@ -64,7 +63,15 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
     if (userDataCookie) {
       try {
         const userData = JSON.parse(decodeURIComponent(userDataCookie));
-        setUserRole(userData.role || 'Guest');
+        const roleMap: Record<number | string, string> = {
+          0: 'SuperAdmin',
+          1: 'Recruiter Admin',
+          2: 'Lead Recruiter',
+          3: 'Recruiter'
+        };
+        const rawRole = userData.role;
+        const normalizedRole = typeof rawRole === 'number' ? roleMap[rawRole] : rawRole;
+        setUserRole(normalizedRole || 'Guest');
       } catch (error) {
         console.error('Error parsing userData cookie in Sidebar:', error);
       }
@@ -77,7 +84,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
       ...(userRole === 'SuperAdmin' ? [{ type: 'item', icon: FiPlus, label: 'Add New Company', onClick: () => setShowAddCompanyModal(true) } as const] : []),
       ...(['SuperAdmin', 'Recruiter Admin', 'Lead Recruiter'].includes(userRole) ? [{ type: 'item', icon: FiUserPlus, label: 'Add New user', onClick: () => setShowAddUserModal(true) } as const] : []),
       ...(userRole !== 'SuperAdmin' ? [{ type: 'item', icon: FiBriefcase, label: 'Create New Clients', onClick: () => setShowAddClientModal(true) } as const] : []),
-      { type: 'item', icon: FiUser, label: 'Interviewers', href: '/admin/interviewers' },
+      ...(userRole === 'SuperAdmin' ? [{ type: 'item', icon: FiUser, label: 'Interviewers', href: '/admin/interviewers' } as const] : []),
       { type: 'divider' },
       ...(userRole !== 'Recruiter' ? [{ type: 'item', icon: FiUsers, label: 'Recruiters', href: '/admin/recruiters' } as const] : []),
       { type: 'item', icon: FiBriefcase, label: 'Active Clients', href: '/admin/clients' },
@@ -120,7 +127,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
           <div className="flex items-center justify-center w-full">
             {isCollapsed ? (
               <Image
-                src="https://firebasestorage.googleapis.com/v0/b/x-talento-new.appspot.com/o/assets%2Flogo-small.png?alt=media&token=7384e676-91ae-4097-b684-285bf631d666"
+                src="/assets/logo/logo-small.png"
                 alt="Logo Icon"
                 width={32}
                 height={32}
@@ -129,7 +136,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
             ) : (
               <div className="flex items-center space-x-3">
                 <Image
-                  src="https://firebasestorage.googleapis.com/v0/b/x-talento-new.appspot.com/o/assets%2Flogo.png?alt=media&token=0e681b04-04b6-4ebc-855e-dfcc3f9acabe"
+                  src="/assets/logo/logo.png"
                   alt="Full Logo"
                   width={160}
                   height={32}
@@ -205,26 +212,12 @@ const Sidebar = ({ isCollapsed, toggleSidebar }: SidebarProps) => {
       ) : null}
 
       {showAddClientModal ? (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowAddClientModal(false)}
-        >
-          <div
-            className="bg-white dark:bg-gray-900 rounded-xl w-full max-w-md overflow-hidden shadow-2xl border border-gray-200 dark:border-gray-800"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-              <div className="text-base font-semibold text-gray-900 dark:text-white">Create Client (Sample)</div>
-              <button type="button" onClick={() => setShowAddClientModal(false)} className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
-                <FiX className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 text-sm text-gray-600 dark:text-gray-300">
-              This is a UI preview modal. Hook it to your DB/API later.
-            </div>
-          </div>
-        </div>
+        <AnimatePresence>
+          <CreateClient onClose={() => setShowAddClientModal(false)} />
+        </AnimatePresence>
       ) : null}
+
+
     </>
   );
 };

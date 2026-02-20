@@ -53,7 +53,7 @@ const ReportPage = () => {
       }
 
       // Fetch real candidate status data from rekrooot server
-      const candidatesRes = await apiFetch(`/candidates${queryParams}`, { token });
+      const candidatesRes = await apiFetch(`/candidates${queryParams}`, { token }) as { candidates: any[] };
       const candidates = candidatesRes.candidates || [];
 
       // Debug: Log the raw data
@@ -166,7 +166,10 @@ const ReportPage = () => {
       // Calculate location statistics using filtered candidates
       const locationCounts = filteredCandidates.reduce((acc: any, candidate: any) => {
         const location = candidate.location || 'Unknown';
-        acc[location] = (acc[location] || 0) + 1;
+        // Normalize location to title case to handle case variations
+        const normalizedLocation = location === 'Unknown' ? 'Unknown' : 
+          location.split(' ').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+        acc[normalizedLocation] = (acc[normalizedLocation] || 0) + 1;
         return acc;
       }, {});
 

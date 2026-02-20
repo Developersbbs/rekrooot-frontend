@@ -1,19 +1,47 @@
 'use client';
 
-import React, { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Dialog } from '@headlessui/react';
 import { FiX, FiCalendar, FiUser, FiClock } from 'react-icons/fi';
 import { toast } from 'react-hot-toast';
 import { auth } from '@/lib/firebase';
 import { apiFetch } from '@/lib/api';
 
-const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
-    const [interviewers, setInterviewers] = useState([]);
-    const [selectedInterviewer, setSelectedInterviewer] = useState(null);
+interface Interviewer {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email: string;
+  zoho_meet_uid?: string;
+}
+
+interface Slot {
+  date: string;
+  time: string;
+  time24: string;
+}
+interface MeetingCreateResponse {
+  interviewId: string;
+  session?: {
+    joinLink?: string;
+    join_url?: string;
+    meetingLink?: string;
+    url?: string;
+  };
+}
+interface RescheduleModalProps{
+  isOpen: boolean;
+  onClose: () => void;
+  candidate: any; // Replace with a proper type if available, e.g., Candidate
+  onRescheduled?: () => void;
+}
+const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }:RescheduleModalProps) => {
+    const [interviewers, setInterviewers] = useState<Interviewer[]>([]);
+    const [selectedInterviewer, setSelectedInterviewer] = useState<Interviewer | null>(null);
     const [interviewerSearchTerm, setInterviewerSearchTerm] = useState('');
     const [showInterviewerDropdown, setShowInterviewerDropdown] = useState(false);
-    const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
-    const [selectedSlot, setSelectedSlot] = useState(null);
+    const [availableTimeSlots, setAvailableTimeSlots] = useState<Slot[]>([]);
+    const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
     const [isLoadingSlots, setIsLoadingSlots] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -41,9 +69,8 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
     const fetchInterviewers = async () => {
         try {
             const token = await auth.currentUser?.getIdToken();
-            const data = await apiFetch('/interviewers', { token });
-            // The server returns mapping and data structure might be different, 
-            // but based on typical patterns in this 앱:
+            const data = await apiFetch<{ interviewers: Interviewer[] }>('/interviewers', { token });
+
             const interviewersData = data.interviewers || [];
             setInterviewers(interviewersData);
 
@@ -60,11 +87,11 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
         }
     };
 
-    const fetchAvailableSlots = async (interviewerId) => {
+    const fetchAvailableSlots = async (interviewerId: string) => {
         setIsLoadingSlots(true);
         try {
             const token = await auth.currentUser?.getIdToken();
-            const data = await apiFetch(`/interviewers/${interviewerId}/timeslots`, { token });
+            const data = await apiFetch<{ success: boolean; timeSlots: Slot[] }>(`/interviewers/${interviewerId}/timeslots`, { token });
 
             if (data.success) {
                 setAvailableTimeSlots(data.timeSlots || []);
@@ -80,7 +107,7 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
         }
     };
 
-    const handleInterviewerSelect = (interviewer) => {
+    const handleInterviewerSelect = (interviewer: Interviewer) => {
         setSelectedInterviewer(interviewer);
         setInterviewerSearchTerm(interviewer.name || interviewer.email);
         setShowInterviewerDropdown(false);
@@ -100,7 +127,6 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
             const token = await auth.currentUser?.getIdToken();
             if (!token) return;
 
-            // 1. Cancel previous Zoho meeting if it exists via server
             const sessionId = candidate.interview_id?.session_id;
             const meetingLink = candidate.interview_id?.meeting_link;
             const presenterId = candidate.interview_id?.presenter_id;
@@ -119,18 +145,11 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                             zsoid: zsoid
                         })
                     });
-                } catch (cancelError) {
+                } catch (cancelError: any) {
                     console.error('Error cancelling previous meeting:', cancelError.response?.data || cancelError.message);
                 }
             }
 
-            // 2. Clear old slot in interviewer schedule
-            // Note: Server-side handles Candidate update and status, 
-            // but we might need to manually update interviewer availability if server doesn't.
-            // Based on candidate.route.js confirm-slot, it updates availability.
-            // We should use a server endpoint for rescheduling if possible.
-
-            // 3. Create new Zoho meeting via server
             let meetData = null;
             try {
                 const [hours, minutes] = selectedSlot.time24.split(':');
@@ -152,7 +171,7 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
                     candidateId: candidate._id || candidate.id
                 };
 
-                meetData = await apiFetch('/meetings/create', {
+                meetData = await apiFetch<MeetingCreateResponse>('/meetings/create', {
                     method: 'POST',
                     token,
                     body: JSON.stringify(meetPayload)
@@ -181,10 +200,10 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
 
             try {
 
-                const fullCandidate = await apiFetch(`/candidates/${candidate._id || candidate.id}`, { token });
+                const fullCandidate = await apiFetch<{ candidate: any }>(`/candidates/${candidate._id || candidate.id}`, { token });
                 const c = fullCandidate.candidate;
 
-                await apiFetch('/emails/send-interview-slot', {
+                await apiFetch<{ success: boolean }>(`/emails/send-interview-slot`, {
                     method: 'POST',
                     token,
                     body: JSON.stringify({
@@ -207,92 +226,9 @@ const RescheduleModal = ({ isOpen, onClose, candidate, onRescheduled }) => {
             toast.success('Interview rescheduled successfully');
             onRescheduled?.();
             onClose();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error rescheduling:', error);
             toast.error('Failed to reschedule: ' + error.message);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleCancelOnly = async () => {
-        if (!window.confirm(`Are you sure you want to cancel the interview for ${candidate?.full_name} without rescheduling?`)) {
-            return;
-        }
-
-        if (isSubmitting) return;
-
-        setIsSubmitting(true);
-        try {
-            const token = await auth.currentUser?.getIdToken();
-            if (!token) return;
-
-            // 1. Cancel Zoho meeting if it exists via server
-            const sessionId = candidate.interview_id?.session_id;
-            const meetingLink = candidate.interview_id?.meeting_link;
-            const presenterId = candidate.interview_id?.presenter_id;
-
-            const zsoid = candidate.interview_id?.zsoid;
-
-            if (sessionId && meetingLink && presenterId) {
-                try {
-                    await apiFetch('/meetings/cancel', {
-                        method: 'POST',
-                        token,
-                        body: JSON.stringify({
-                            sessionId: sessionId,
-                            presenterId: presenterId,
-                            zsoid: zsoid
-                        })
-                    });
-                } catch (cancelError) {
-                    console.error('Error cancelling interview meeting via server:', cancelError);
-                }
-            }
-
-            // 2. Clear slot in interviewer schedule if needed
-            // Based on confirm-slot logic, we should probably have a cancel-slot endpoint
-            // or just update candidate status.
-
-            // 3. Update candidate record via server
-            await apiFetch(`/candidates/${candidate._id || candidate.id}`, {
-                method: 'PUT',
-                token,
-                body: JSON.stringify({
-                    final_status: null,
-                    is_active: true,
-                    interview_id: null
-                })
-            });
-
-            // 4. Send cancellation email notification via server
-            try {
-                const fullCandidate = await apiFetch(`/candidates/${candidate._id || candidate.id}`, { token });
-                const c = fullCandidate.candidate;
-
-                await apiFetch('/emails/send-interview-slot', {
-                    method: 'POST',
-                    token,
-                    body: JSON.stringify({
-                        type: 'cancel',
-                        candidateEmail: c.email,
-                        candidateName: c.full_name,
-                        recruiterEmail: auth.currentUser?.email,
-                        vendorEmail: c.vendor_id?.email,
-                        jobTitle: c.job_id?.jobTitle || c.job_id?.title,
-                        clientName: c.client_id?.name
-                    })
-                });
-            } catch (emailErr) {
-                console.error('Error sending cancellation email via server:', emailErr);
-            }
-
-            toast.success('Interview cancelled successfully');
-            onRescheduled?.();
-            onClose();
-        } catch (error) {
-            console.error('Error cancelling interview:', error);
-            toast.error('Failed to cancel: ' + error.message);
         } finally {
             setIsSubmitting(false);
         }

@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { FiUserPlus, FiX } from 'react-icons/fi';
 import { apiFetch, ApiError } from '@/lib/api';
 import { auth } from '@/lib/firebase';
@@ -225,6 +225,35 @@ export default function NewUser({ onClose }: NewUserProps) {
             if (!formData.role) {
                 setErrorMessage('Please select a role.');
                 return;
+            }
+
+            if (formData.role === 'Recruiter Admin') {
+                try {
+                    const usersRes = await apiFetch<{ users: { _id?: string; id?: string; role: number | string }[] }>(`/users?company_id=${formData.companyId}`, { token });
+                    const existingAdmins = (usersRes.users || []).filter(u => u.role === 1 || u.role === 'Recruiter Admin');
+
+                    if (existingAdmins.length > 0) {
+                        const confirmReplace = window.confirm('A Recruiter Admin already exists for this company. Do you want to replace them? This will delete the existing Recruiter Admin.');
+                        if (!confirmReplace) {
+                            setIsSubmitting(false);
+                            return;
+                        }
+
+                        // Proceed to delete existing Recruiter Admin
+                        for (const admin of existingAdmins) {
+                            const adminId = admin._id || admin.id;
+                            if (adminId) {
+                                await apiFetch(`/users/${adminId}`, { method: 'DELETE', token });
+                            }
+                        }
+                        toast.success('Existing Recruiter Admin(s) deleted successfully.');
+                    }
+                } catch (err) {
+                    console.error('Error checking or replacing existing Recruiter Admin:', err);
+                    setErrorMessage('Failed to handle existing Recruiter Admin.');
+                    setIsSubmitting(false);
+                    return;
+                }
             }
 
             const payload: {

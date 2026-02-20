@@ -110,7 +110,7 @@ const RecruiterDetails = () => {
         }
 
         // Fetch recruiter details from backend
-        const recruiterRes = await apiFetch(`/users/${params.id}`, { token })
+        const recruiterRes = await apiFetch(`/users/${params.id}`, { token }) as { user: any }
 
         if (!recruiterRes || !recruiterRes.user) {
           setError('Recruiter not found')
@@ -122,7 +122,7 @@ const RecruiterDetails = () => {
         console.log('Recruiter data:', userData)
 
         // Map role number to string
-        const mappedRole = typeof userData.role === 'number' ? roleMap[userData.role] : userData.role
+        const mappedRole = typeof userData.role === 'number' && userData.role in roleMap ? roleMap[userData.role as keyof typeof roleMap] : userData.role
 
         // Extract company name if populated
         const companyName = (userData.company_id && typeof userData.company_id === 'object')
@@ -142,10 +142,10 @@ const RecruiterDetails = () => {
 
         // Fetch related data
         const [candidatesRes, vendorsRes, clientsRes, interviewsRes] = await Promise.all([
-          apiFetch(`/candidates?created_by=${userData._id}`, { token }),
-          apiFetch(`/vendors?created_by=${userData._id}`, { token }),
-          apiFetch(`/clients?created_by=${userData._id}`, { token }),
-          apiFetch(`/interviewers/all-interviews?created_by=${userData._id}`, { token })
+          apiFetch(`/candidates?created_by=${userData._id}`, { token }) as unknown as { candidates: any[] },
+          apiFetch(`/vendors?created_by=${userData._id}`, { token }) as unknown as { vendors: any[] },
+          apiFetch(`/clients?created_by=${userData._id}`, { token }) as unknown as { clients: any[] },
+          apiFetch(`/interviewers/all-interviews?created_by=${userData._id}`, { token }) as unknown as { interviews: any[] }
         ]);
 
         setStats({

@@ -133,7 +133,7 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
 
           // Interview details if status is not 0 or 5
           if (data.status !== 0 && data.status !== 5) {
-            const interviewDetails = {
+            let interviewDetails = {
               result: data.result || 'N/A',
               resultDoc: data.result_document_url || null,
               interviewVideoUrl: data.video_url || null,
@@ -143,6 +143,23 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
               communicationRating: data.communication_rating || null,
               overallRating: data.overall_rating || null
             };
+
+            // Use interview status from populated interview_id to set result
+            if (data.interview_id && data.interview_id.status) {
+              const interviewResultMap: { [key: number]: string } = {
+                3: '1', // selected
+                4: '2', // rejected
+                5: '3', // no_show
+                6: '4', // cancelled
+                7: '6', // proxy
+                8: '5'  // technical_issue
+              };
+              const resultFromInterview = interviewResultMap[data.interview_id.status];
+              if (resultFromInterview) {
+                interviewDetails.result = resultFromInterview;
+              }
+            }
+
             setInterviewDetails(interviewDetails);
           }
 
@@ -155,7 +172,6 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
             createdByName: data.created_by?.username || 'N/A',
             createdAt: data.createdAt ? new Date(data.createdAt) : null,
             interviewerName: data.interview_id?.interviewer_id?.name || 'N/A',
-            // Map snake_case to camelCase for compatibility with existing UI
             primaryContact: data.primary_contact,
             secondaryContact: data.secondary_contact,
             profilePic: data.profile_pic,
@@ -545,6 +561,7 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
                 { label: 'Client', value: candidate.client_id?.name || candidate.clientName, icon: '🏢' },
                 { label: 'Vendor', value: candidate.vendor_id?.name || candidate.vendorName, icon: '🤝' },
                 { label: 'Location', value: candidate.location, icon: '📍' },
+
                 { label: 'Primary Contact', value: candidate.primary_contact || candidate.primaryContact, icon: '📱' },
                 { label: 'Secondary Contact', value: candidate.secondary_contact || candidate.secondaryContact, icon: '📞' },
                 { label: 'Created By', value: candidate.created_by?.username || candidate.createdByName, icon: '👤' },
@@ -712,7 +729,7 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
                       },
                       {
                         label: 'Result',
-                        value: candidate.status === 4 ? (interviewDetails?.result ? (resultLabels[interviewDetails.result] || interviewDetails.result) : 'N/A') : 'N/A',
+                        value: interviewDetails?.result ? (resultLabels[interviewDetails.result] || interviewDetails.result) : 'N/A',
                         icon: '🎯'
                       }
                     ].map((item, index) => (
@@ -864,7 +881,7 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
                         <p className="text-red-500 mb-4">{docError}</p>
                         <button
                           onClick={() => {
-                            if (typeof document !== 'undefined') {
+                            if (typeof document !== 'undefined' && docUrl) {
                               const downloadLink = document.createElement('a');
                               downloadLink.href = docUrl;
                               downloadLink.download = selectedDoc?.fileName || 'document';

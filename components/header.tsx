@@ -127,6 +127,7 @@ const Header = ({ toggleSidebar, darkMode, toggleDarkMode }: HeaderProps) => {
             // Set selected company if applicable
             if (finalUserData.role !== 'SuperAdmin' && finalUserData.company) {
               setSelectedCompany(finalUserData.company);
+              localStorage.setItem('selectedCompany', JSON.stringify(finalUserData.company));
             }
 
             // Update cookie if we fetched fresh data

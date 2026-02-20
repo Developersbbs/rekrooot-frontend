@@ -47,7 +47,7 @@ const LoadingSpinner = () => (
   </div>
 );
 
-const InfoItem = ({ icon, value, className }) => {
+const InfoItem = ({ icon, value, className }: { icon: string; value: string; className?: string }) => {
   const getIcon = () => {
     switch (icon) {
       case 'email':
@@ -122,7 +122,7 @@ const RecruiterPage = () => {
                 throw new Error("Old cookie format");
               }
 
-              const mappedRole = typeof userData.role === 'number' ? roleMap[userData.role] : userData.role;
+              const mappedRole = typeof userData.role === 'number' && userData.role in roleMap ? roleMap[userData.role as keyof typeof roleMap] : userData.role;
 
               setCurrentUser({
                 ...userData,
@@ -141,11 +141,11 @@ const RecruiterPage = () => {
           }
 
           const token = await firebaseUser.getIdToken();
-          const res = await apiFetch('/auth/me', { token });
+          const res = await apiFetch('/auth/me', { token }) as { user: any };
 
           if (res?.user) {
             const userData = res.user;
-            const mappedRole = typeof userData.role === 'number' ? roleMap[userData.role] : userData.role;
+            const mappedRole = typeof userData.role === 'number' && userData.role in roleMap ? roleMap[userData.role as keyof typeof roleMap] : userData.role;
 
             const appUser = {
               ...userData,
@@ -189,8 +189,9 @@ const RecruiterPage = () => {
     };
     getInitialCompany();
 
-    const handleCompanyChange = (event) => {
-      setSelectedCompany(event.detail);
+    const handleCompanyChange = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      setSelectedCompany(customEvent.detail);
     };
 
     window.addEventListener('companyChanged', handleCompanyChange);
@@ -389,7 +390,7 @@ const RecruiterPage = () => {
         method: 'PUT',
         token,
         body: JSON.stringify({
-        headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           lead_recruiter_id: selectedLeadRecruiter,
           recruiter_region: selectedRegion
         })
@@ -405,7 +406,8 @@ const RecruiterPage = () => {
       await fetchRecruitersData();
     } catch (error) {
       console.error('Error migrating recruiter:', error);
-      alert(error.message);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(errorMessage);
     } finally {
       setMigrationLoading(false);
     }
@@ -561,7 +563,7 @@ const RecruiterPage = () => {
           </button>
 
           {/* Delete Button */}
-          {!(currentUser?.role === 'Lead Recruiter' && userData.role === 'Recruiter Admin') && (
+          {(userData.role !== 'Recruiter Admin' || currentUser?.role === 'SuperAdmin') && (
             <button
               type="button"
               onClick={() => handleDeleteRecruiter(userData.id, userData.name, userData.role, userData.uid)}
@@ -694,7 +696,7 @@ const RecruiterPage = () => {
           <div className="absolute inset-0 bg-gradient-to-r from-primary-500 to-accent-500 opacity-10" />
 
           {/* Delete Button - Top Right */}
-          {!(currentUser?.role === 'Lead Recruiter' && recruiterAdmin.role === 'Recruiter Admin') && (
+          {currentUser?.role === 'SuperAdmin' && (
             <button
               type="button"
               onClick={() => handleDeleteRecruiter(recruiterAdmin.id, recruiterAdmin.name, recruiterAdmin.role, recruiterAdmin.uid)}
@@ -740,7 +742,7 @@ const RecruiterPage = () => {
                   />
                   <InfoItem
                     icon="phone"
-                    value={recruiterAdmin.phone_number}
+                    value={recruiterAdmin.phone_number || 'N/A'}
                     className="bg-gray-50 dark:bg-gray-700/50"
                   />
                   <InfoItem
@@ -1020,9 +1022,6 @@ const RecruiterPage = () => {
 
             {/* Main Content */}
             <div className="space-y-8">
-              {/* Lead's Profile Card */}
-              {renderUserCard(selectedRecruiter)}
-
               {/* Team Members Grid */}
               <div>
                 <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6 flex items-center gap-2">

@@ -1,13 +1,18 @@
 'use client'
 import { useState, useEffect, useCallback, memo } from 'react'
 import { Dialog } from '@headlessui/react'
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { db, storage, auth } from '@/lib/firebase'
+import { storage, auth } from '@/lib/firebase'
 import { FiUpload, FiX } from 'react-icons/fi'
 import { toast } from 'react-hot-toast'
 import Cookies from 'js-cookie'
 import { apiFetch } from '@/lib/api'
+
+// Type definitions
+interface EmailResponse {
+  success: boolean;
+  message?: string;
+}
 
 // Memoize child components
 interface DocumentListProps {
@@ -214,7 +219,7 @@ const AddNewCandidate = ({
       // Use rekrooot-server endpoint
       const data = await apiFetch(`/interviewers/${formData.interviewerId}/timeslots`, {
         token
-      });
+      }) as { success: boolean; timeSlots: any[] };
 
       if (data.success) {
         setAvailableTimeSlots(data.timeSlots || [])
@@ -240,7 +245,6 @@ const AddNewCandidate = ({
     }
   }, [formData.interviewerId, fetchTimeSlots])
 
-  // Validate form before submission
   const validateCompanySelection = () => {
     const userDataCookie = Cookies.get('userData')
     const selectedCompanyStr = localStorage.getItem('selectedCompany')
@@ -289,8 +293,7 @@ const AddNewCandidate = ({
     return true
   }
 
-  // Check for existing candidate with same email
-  const checkExistingCandidate = async (email) => {
+  const checkExistingCandidate = async (email: string) => {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return [];
@@ -301,7 +304,7 @@ const AddNewCandidate = ({
 
       const res = await apiFetch(`/candidates?email=${encodeURIComponent(email)}${companyId !== 'all' ? `&company_id=${companyId}` : ''}`, {
         token
-      });
+      }) as { candidates: any[] };
 
       return res.candidates || [];
     } catch (error) {
@@ -313,7 +316,7 @@ const AddNewCandidate = ({
   useEffect(() => {
     if (selectedJob) {
       setCurrentSelectedJob(selectedJob)
-      setFormData(prev => ({
+      setFormData((prev: any) => ({
         ...prev,
         jobId: selectedJob.id,
         clientId: selectedJob.clientId
@@ -321,11 +324,10 @@ const AddNewCandidate = ({
     }
     if (selectedClient) {
       setCurrentSelectedClient(selectedClient)
-      setFormData(prev => ({ ...prev, clientId: selectedClient.id }))
+      setFormData((prev: any) => ({ ...prev, clientId: selectedClient.id }))
     }
   }, [selectedJob, selectedClient])
 
-  // Replace the auth state handler with cookie-based user data
   useEffect(() => {
     const userDataCookie = Cookies.get('userData')
     if (userDataCookie) {
@@ -335,7 +337,7 @@ const AddNewCandidate = ({
           uid: userData.uid,
           name: userData.name,
           email: userData.email,
-          role: userData.role, // Add role here
+          role: userData.role,
         })
       } catch (error) {
         console.error('Error parsing userData cookie:', error)
@@ -344,16 +346,16 @@ const AddNewCandidate = ({
     }
   }, [])
 
-  const handleProfilePicChange = useCallback((e) => {
-    const file = e.target.files[0]
+  const handleProfilePicChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
     if (file) {
-      setFormData(prev => ({ ...prev, profilePic: file }))
+      setFormData((prev:any) => ({ ...prev, profilePic: file }))
       setProfilePreview(URL.createObjectURL(file))
     }
   }, [])
 
-  const handleResumeChange = useCallback(async (e) => {
-    const files = Array.from(e.target.files)
+  const handleResumeChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
     const allowedTypes = [
       'application/pdf',
       'application/msword',
@@ -374,33 +376,36 @@ const AddNewCandidate = ({
       const toastId = toast.loading('Parsing resume details...');
 
       try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) {
+          toast.error('Authentication required', { id: toastId });
+          return;
+        }
+
         const formDataPayload = new FormData();
         formDataPayload.append('file', file);
 
-        const response = await fetch('/api/parseresume', {
+        const response = await apiFetch<any>('/candidates/parse', {
           method: 'POST',
+          token,
           body: formDataPayload,
         });
 
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.data) {
-            const parsed = result.data;
+        if (response.success && response.data) {
+          const parsed = response.data;
 
-            setFormData(prev => ({
-              ...prev,
-              name: parsed.name || prev.name,
-              email: parsed.email || prev.email,
-              primaryContact: parsed.phone || prev.primaryContact,
-              location: parsed.location || prev.location,
-            }));
+          setFormData((prev:any) => ({
+            ...prev,
+            name: parsed.name || prev.name,
+            email: parsed.email || prev.email,
+            primaryContact: parsed.phone || prev.primaryContact,
+            location: parsed.location || prev.location,
+            experience: parsed.experience || prev.experience,
+          }));
 
-            toast.success('Resume details parsed successfully!', { id: toastId });
-          } else {
-            toast.error('Could not parse resume details.', { id: toastId });
-          }
+          toast.success('Resume details parsed successfully!', { id: toastId });
         } else {
-          toast.error('Failed to parse resume.', { id: toastId });
+          toast.error('Could not parse resume details.', { id: toastId });
         }
       } catch (error) {
         console.error('Parsing error:', error);
@@ -411,15 +416,15 @@ const AddNewCandidate = ({
     }
   }, [formData])
 
-  const handleSupportingDocumentsChange = useCallback((e) => {
-    const files = Array.from(e.target.files)
+  const handleSupportingDocumentsChange = useCallback((e:React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target?.files || [])
     const allowedTypes = [
       'application/pdf',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     ]
 
-    const validFiles = files.filter(file => allowedTypes.includes(file.type))
+    const validFiles = files.filter((file: any) => allowedTypes.includes(file?.type))
     if (validFiles.length !== files.length) {
       toast.error('Some files were not added. Only PDF and Word documents are allowed.')
     }
@@ -427,11 +432,11 @@ const AddNewCandidate = ({
     setSupportingDocuments(prev => [...prev, ...validFiles])
   }, [])
 
-  const removeResume = useCallback((index) => {
+  const removeResume = useCallback((index:any) => {
     setResume(prev => prev.filter((_, i) => i !== index))
   }, [])
 
-  const removeSupportingDocument = useCallback((index) => {
+  const removeSupportingDocument = useCallback((index:any) => {
     setSupportingDocuments(prev => prev.filter((_, i) => i !== index))
   }, [])
 
@@ -519,12 +524,13 @@ const AddNewCandidate = ({
       onCandidateAdded?.();
     } catch (error) {
       console.error('Error updating candidate:', error);
-      toast.error(`Failed to update candidate: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to update candidate: ${errorMessage}`);
     }
   };
 
   // Modify the handleSubmit function to handle both add and edit
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (isSubmitting) return;
@@ -616,11 +622,11 @@ const AddNewCandidate = ({
 
       if (!finalInterviewerId && currentJobData && currentJobData.technologies?.length > 0) {
         try {
-          const jobTechIds = currentJobData.technologies.map(t => (t && typeof t === 'object') ? t._id : t);
+          const jobTechIds = currentJobData.technologies.map((t: any) => (t && typeof t === 'object') ? t._id : t);
           const matchingInterviewer = interviewers.find(interviewer => {
             if (!interviewer.technologies) return false;
             const techArray = Array.isArray(interviewer.technologies) ? interviewer.technologies : [];
-            return techArray.some(techId => {
+            return techArray.some((techId:any) => {
               const idToCheck = (techId && typeof techId === 'object') ? techId._id : techId;
               return jobTechIds.includes(idToCheck);
             });
@@ -645,7 +651,7 @@ const AddNewCandidate = ({
       if (finalInterviewerId) {
         try {
           const interviewerRes = await apiFetch(`/interviewers/${finalInterviewerId}`, { token });
-          interviewerData = interviewerRes.interviewer;
+          interviewerData = (interviewerRes as any)?.interviewer;
         } catch (error) {
           console.error('Error fetching interviewer details:', error);
         }
@@ -677,7 +683,7 @@ const AddNewCandidate = ({
         body: JSON.stringify(payload)
       });
 
-      const newCandidate = res.candidate;
+      const newCandidate = (res as any)?.candidate;
       console.log('Candidate created:', newCandidate?._id);
 
       if (!newCandidate) throw new Error('Failed to create candidate');
@@ -729,8 +735,8 @@ const AddNewCandidate = ({
               body: JSON.stringify(meetingPayload)
             });
 
-            if (meetData.session) {
-              const session = meetData.session;
+            if ((meetData as any)?.session) {
+              const session = (meetData as any).session;
               meetingLink = session.joinLink || session.join_url || session.meetingLink || session.meeting_link || session.url;
               sessionId = session.meetingKey || session.meeting_key || session.sys_id || session.sessionId || session.session_id || session.id;
             }
@@ -742,7 +748,7 @@ const AddNewCandidate = ({
         const baseUrl = process.env.NEXT_PUBLIC_URL || window.location.origin;
         const schedulingLink = `${baseUrl}/timeslots?candidateId=${newCandidate._id}`;
 
-        const emailResult = await apiFetch('/emails/send-interview-slot', {
+        const emailResult = await apiFetch<EmailResponse>('/emails/send-interview-slot', {
           method: 'POST',
           token,
           body: JSON.stringify({
@@ -770,7 +776,8 @@ const AddNewCandidate = ({
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error(`Failed to add candidate: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error(`Failed to add candidate: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -834,19 +841,19 @@ const AddNewCandidate = ({
     setFormData((prev: any) => ({ ...prev, clientId }))
   }
 
-  const handleJobChange = (jobId) => {
+  const handleJobChange = (jobId: string) => {
     const job = jobs.find(job => job.id === jobId)
     setCurrentSelectedJob(job)
-    setFormData(prev => ({ ...prev, jobId }))
+    setFormData((prev:any) => ({ ...prev, jobId }))
   }
 
-  const handleInterviewerSearch = (value) => {
+  const handleInterviewerSearch = (value: string) => {
     setInterviewerSearchTerm(value)
     setShowInterviewerDropdown(true)
   }
 
-  const handleInterviewerSelect = (interviewer) => {
-    setFormData(prev => ({ ...prev, interviewerId: interviewer.id }))
+  const handleInterviewerSelect = (interviewer: { id: string; name?: string; email?: string; role?: string }) => {
+    setFormData((prev:any) => ({ ...prev, interviewerId: interviewer.id }))
     setInterviewerSearchTerm(`${interviewer.name || interviewer.email}${interviewer.role ? ` - ${interviewer.role}` : ''}`)
     setShowInterviewerDropdown(false)
   }
@@ -859,7 +866,7 @@ const AddNewCandidate = ({
   const handleInterviewerInputBlur = () => {
     setTimeout(() => setShowInterviewerDropdown(false), 150)
   }
-  const handleTimeSlotSelect = (timeSlot) => {
+  const handleTimeSlotSelect = (timeSlot:{date:string, time:string, time24:string}) => {
     setSelectedTimeSlot(`${timeSlot.date} at ${timeSlot.time}`)
     setSelectedSlotData({
       date: timeSlot.date,
@@ -962,7 +969,7 @@ const AddNewCandidate = ({
   useEffect(() => {
     if (prefilledJobData || selectedJob) {
       const jobToUse = prefilledJobData || selectedJob;
-      setFormData(prev => ({
+      setFormData((prev:any) => ({
         ...prev,
         jobId: jobToUse.id,
         clientId: jobToUse.clientId
@@ -986,7 +993,7 @@ const AddNewCandidate = ({
     if (prefilledJobData) {
       const relatedClient = clients.find(client => client.id === prefilledJobData.clientId);
 
-      setFormData(prev => ({
+      setFormData((prev:any) => ({
         ...prev,
         jobId: prefilledJobData.id,
         clientId: prefilledJobData.clientId
@@ -1007,10 +1014,10 @@ const AddNewCandidate = ({
   }, [prefilledJobData, clients, jobs]);
 
   useEffect(() => {
-    const handleCompanyChange = (event) => {
+    const handleCompanyChange = (event: CustomEvent) => {
       const selectedCompany = event.detail;
       if (user?.role === 'SuperAdmin') {
-        setFormData(prev => ({
+        setFormData((prev:any) => ({
           ...prev,
           company: selectedCompany.name
         }));
@@ -1018,9 +1025,9 @@ const AddNewCandidate = ({
     };
 
     if (typeof window !== 'undefined') {
-      window.addEventListener('companyChanged', handleCompanyChange);
+      window.addEventListener('companyChanged', handleCompanyChange as any);
       return () => {
-        window.removeEventListener('companyChanged', handleCompanyChange);
+        window.removeEventListener('companyChanged', handleCompanyChange as any);
       };
     }
   }, [user?.role]);
