@@ -338,75 +338,94 @@ const CandidateProfile = ({ isOpen, onClose, candidateId, onEdit, onDelete, isFr
     setFilteredJobs(jobsForClient);
   };
 
-const handleMigrate = async () => {
-  if (!selectedJobId || !selectedClientId) {
-    toast.error('Please select both client and job');
-    return;
-  }
-
-  setMigrateLoading(true);
-  try {
-    const token = await auth.currentUser?.getIdToken();
-    if (!token) throw new Error('Not authenticated');
-
-    // 1. Call the migrate route (backend handles meeting cancellation internally)
-    const migrateRes: any = await apiFetch(`/candidates/${candidateId}/migrate`, {
-      method: 'PUT',
-      token,
-      body: JSON.stringify({
-        new_client_id: selectedClientId,
-        new_job_id: selectedJobId,
-        new_vendor_id: candidate?.vendor_id?._id || candidate?.vendor_id || undefined,
-      })
-    });
-
-    if (migrateRes?.status !== 'success') {
-      throw new Error(migrateRes?.message || 'Migration failed');
+  const handleMigrate = async () => {
+    if (!selectedJobId || !selectedClientId) {
+      toast.error('Please select both client and job');
+      return;
     }
 
-    // 2. Send invite email for the new job
-    const emailLoadingToast = toast.loading('Sending invite notification...');
+    setMigrateLoading(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error('Not authenticated');
 
-    const newJobTitle = filteredJobs.find(
-      (j: any) => (j._id || j.id) === selectedJobId
-    )?.title || 'N/A';
+      // 1. Cancel old meeting if it exists
+      const oldInterview = candidate?.interview_id;
+      if (oldInterview && oldInterview.session_id && oldInterview.presenter_id) {
+        try {
+          await apiFetch('/meetings/cancel', {
+            method: 'POST',
+            token,
+            body: JSON.stringify({
+              sessionId: oldInterview.session_id,
+              presenterId: oldInterview.presenter_id,
+              zsoid: oldInterview.zsoid
+            })
+          });
+        } catch (err) {
+          console.error('Error cancelling old meeting during migration:', err);
+        }
+      }
 
-    const newClientName = clients.find(
-      (c: any) => (c._id || c.id) === selectedClientId
-    )?.name || 'N/A';
+      // 2. Update candidate with new job and RESET all status/rating fields
+      await apiFetch(`/candidates/${candidateId}`, {
+        method: 'PUT',
+        token,
+        body: JSON.stringify({
+          client_id: selectedClientId,
+          job_id: selectedJobId,
+          status: 0, // Reset to Waiting
+          interview_id: null,
+          final_status: null,
+          result: null,
+          feedback: null,
+          technical_rating: null,
+          communication_rating: null,
+          overall_rating: null,
+          video_url: null,
+          result_document_url: null,
+          notes: null
+        })
+      });
 
-    const emailResult: any = await apiFetch('/emails/send-interview-slot', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({
-        candidateEmail: candidate.email,
-        candidateName: candidate.full_name,
-        recruiterEmail: userData?.email,
-        jobTitle: newJobTitle,
-        clientName: newClientName,
-        link: `${window.location.origin}/timeslots?candidateId=${candidateId}`,
-        type: 'invite'
-      }),
-    });
+      // Show loading toast for email
+      const emailLoadingToast = toast.loading('Sending migration & invite notifications...');
 
-    toast.dismiss(emailLoadingToast);
+      const newJobTitle = filteredJobs.find((j: any) => (j._id || j.id) === selectedJobId)?.title || 'N/A';
+      const newClientName = clients.find((c: any) => (c._id || c.id) === selectedClientId)?.name || 'N/A';
 
-    if (emailResult?.success) {
-      toast.success('Candidate migrated and invite sent successfully');
-    } else {
-      toast.success('Candidate migrated successfully');
-      toast.error('Failed to send invite email');
+      // 3. Send INVITE email for the new job
+      const emailResult: any = await apiFetch('/emails/send-interview-slot', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          candidateEmail: candidate.email,
+          candidateName: candidate.full_name,
+          recruiterEmail: userData?.email,
+          jobTitle: newJobTitle,
+          clientName: newClientName,
+          link: `${window.location.origin}/timeslots?candidateId=${candidateId}`,
+          type: 'invite' // Send invitation for the new job
+        }),
+      });
+
+      toast.dismiss(emailLoadingToast);
+
+      if (emailResult.success) {
+        toast.success('Candidate migrated and invite sent successfully');
+      } else {
+        toast.error('Migration successful but failed to send invite');
+      }
+
+      setIsMigrateModalOpen(false);
+      onClose(); // Close the profile modal
+    } catch (error: any) {
+      console.error('Error in migration process:', error);
+      toast.error(`Migration failed: ${error.message}`);
+    } finally {
+      setMigrateLoading(false);
     }
-
-    setIsMigrateModalOpen(false);
-    onClose();
-  } catch (error: any) {
-    console.error('Error in migration process:', error);
-    toast.error(`Migration failed: ${error.message}`);
-  } finally {
-    setMigrateLoading(false);
-  }
-};
+  };
 
   if (!isOpen) return null
 
