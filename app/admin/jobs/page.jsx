@@ -164,6 +164,8 @@ const JobsPage = () => {
           candidateCounts: job.candidate_counts ? {
             waiting: job.candidate_counts.waiting || 0,
             scheduled: job.candidate_counts.scheduled || 0,
+            rescheduled: job.candidate_counts.rescheduled || 0,
+            interviewInReview: job.candidate_counts.interview_in_review || 0,
             selected: job.candidate_counts.selected || 0,
             rejected: job.candidate_counts.rejected || 0,
             noShow: job.candidate_counts.no_show || 0,
@@ -175,6 +177,8 @@ const JobsPage = () => {
           } : {
             waiting: 0,
             scheduled: 0,
+            rescheduled: 0,
+            interviewInReview: 0,
             selected: 0,
             rejected: 0,
             noShow: 0,
@@ -396,7 +400,20 @@ const JobsPage = () => {
             requiredSkills: res.job.technologies ? res.job.technologies.map(t => typeof t === 'object' ? t.name : t) : [],
             clientId: res.job.client_id?._id || res.job.client_id,
             clientName: res.job.client_id?.name,
-            candidateCounts: res.job.candidate_counts || job.candidateCounts
+            candidateCounts: res.job.candidate_counts ? {
+              waiting: res.job.candidate_counts.waiting || 0,
+              scheduled: res.job.candidate_counts.scheduled || 0,
+              rescheduled: res.job.candidate_counts.rescheduled || 0,
+              interviewInReview: res.job.candidate_counts.interview_in_review || 0,
+              selected: res.job.candidate_counts.selected || 0,
+              rejected: res.job.candidate_counts.rejected || 0,
+              noShow: res.job.candidate_counts.no_show || 0,
+              cancelled: res.job.candidate_counts.cancelled || 0,
+              technicalIssue: res.job.candidate_counts.technical_issue || 0,
+              proxy: res.job.candidate_counts.proxy || 0,
+              onHold: res.job.candidate_counts.on_hold || 0,
+              applied: res.job.candidate_counts.applied || 0
+            } : job.candidateCounts
           } : job
         ))
 
@@ -479,12 +496,12 @@ const JobsPage = () => {
     const rect = e.target.getBoundingClientRect()
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft
-    
+
     // Calculate position to center the dropdown below the button
     const dropdownWidth = 120 // Approximate width of dropdown
     const buttonCenter = rect.left + rect.width / 2
     const dropdownLeft = buttonCenter - dropdownWidth / 2
-    
+
     setStatusDropdown({
       isOpen: true,
       jobId,
@@ -677,7 +694,7 @@ const JobsPage = () => {
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Tech Issue</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Proxy</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">On Hold</th>
-                  
+
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Created</th>
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Status</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Actions</th>
@@ -709,8 +726,8 @@ const JobsPage = () => {
                           disabled={job.status !== '0'}
                           title={job.status !== '0' ? 'Cannot apply for inactive jobs' : ''}
                           className={`inline-flex items-center justify-center p-2 rounded-full transition-all duration-200
-                            ${job.status === '0' 
-                              ? 'text-primary-600 hover:text-white hover:bg-primary-500 dark:text-primary-400 dark:hover:text-white dark:hover:bg-primary-600' 
+                            ${job.status === '0'
+                              ? 'text-primary-600 hover:text-white hover:bg-primary-500 dark:text-primary-400 dark:hover:text-white dark:hover:bg-primary-600'
                               : 'text-gray-400 cursor-not-allowed opacity-50'}`}
                         >
                           <FiUserPlus className="w-5 h-5" />
@@ -725,13 +742,13 @@ const JobsPage = () => {
                                 status === 'scheduled' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200' :
                                   status === 'interviewInReview' ? 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200' :
                                     status === 'selected' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200' :
-                                    status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200' :
-                                      status === 'noShow' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200' :
-                                        status === 'cancelled' ? 'bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-200' :
-                                          status === 'technicalIssue' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200' :
-                                            status === 'proxy' ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200' :
-                                              status === 'onHold' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200' :
-                                                'bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-200'}`}>
+                                      status === 'rejected' ? 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200' :
+                                        status === 'noShow' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200' :
+                                          status === 'cancelled' ? 'bg-pink-100 text-pink-800 dark:bg-pink-900/50 dark:text-pink-200' :
+                                            status === 'technicalIssue' ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200' :
+                                              status === 'proxy' ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200' :
+                                                status === 'onHold' ? 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-200' :
+                                                  'bg-gray-100 text-gray-800 dark:bg-gray-900/50 dark:text-gray-200'}`}>
                             {status === 'total' ?
                               totalCandidates :
                               job.candidateCounts?.[status] || 0}

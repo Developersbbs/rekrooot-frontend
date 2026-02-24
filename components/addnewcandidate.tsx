@@ -349,7 +349,7 @@ const AddNewCandidate = ({
   const handleProfilePicChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      setFormData((prev:any) => ({ ...prev, profilePic: file }))
+      setFormData((prev: any) => ({ ...prev, profilePic: file }))
       setProfilePreview(URL.createObjectURL(file))
     }
   }, [])
@@ -394,7 +394,7 @@ const AddNewCandidate = ({
         if (response.success && response.data) {
           const parsed = response.data;
 
-          setFormData((prev:any) => ({
+          setFormData((prev: any) => ({
             ...prev,
             name: parsed.name || prev.name,
             email: parsed.email || prev.email,
@@ -416,7 +416,7 @@ const AddNewCandidate = ({
     }
   }, [formData])
 
-  const handleSupportingDocumentsChange = useCallback((e:React.ChangeEvent<HTMLInputElement>) => {
+  const handleSupportingDocumentsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target?.files || [])
     const allowedTypes = [
       'application/pdf',
@@ -432,11 +432,11 @@ const AddNewCandidate = ({
     setSupportingDocuments(prev => [...prev, ...validFiles])
   }, [])
 
-  const removeResume = useCallback((index:any) => {
+  const removeResume = useCallback((index: any) => {
     setResume(prev => prev.filter((_, i) => i !== index))
   }, [])
 
-  const removeSupportingDocument = useCallback((index:any) => {
+  const removeSupportingDocument = useCallback((index: any) => {
     setSupportingDocuments(prev => prev.filter((_, i) => i !== index))
   }, [])
 
@@ -626,7 +626,7 @@ const AddNewCandidate = ({
           const matchingInterviewer = interviewers.find(interviewer => {
             if (!interviewer.technologies) return false;
             const techArray = Array.isArray(interviewer.technologies) ? interviewer.technologies : [];
-            return techArray.some((techId:any) => {
+            return techArray.some((techId: any) => {
               const idToCheck = (techId && typeof techId === 'object') ? techId._id : techId;
               return jobTechIds.includes(idToCheck);
             });
@@ -844,7 +844,7 @@ const AddNewCandidate = ({
   const handleJobChange = (jobId: string) => {
     const job = jobs.find(job => job.id === jobId)
     setCurrentSelectedJob(job)
-    setFormData((prev:any) => ({ ...prev, jobId }))
+    setFormData((prev: any) => ({ ...prev, jobId }))
   }
 
   const handleInterviewerSearch = (value: string) => {
@@ -853,7 +853,7 @@ const AddNewCandidate = ({
   }
 
   const handleInterviewerSelect = (interviewer: { id: string; name?: string; email?: string; role?: string }) => {
-    setFormData((prev:any) => ({ ...prev, interviewerId: interviewer.id }))
+    setFormData((prev: any) => ({ ...prev, interviewerId: interviewer.id }))
     setInterviewerSearchTerm(`${interviewer.name || interviewer.email}${interviewer.role ? ` - ${interviewer.role}` : ''}`)
     setShowInterviewerDropdown(false)
   }
@@ -866,7 +866,7 @@ const AddNewCandidate = ({
   const handleInterviewerInputBlur = () => {
     setTimeout(() => setShowInterviewerDropdown(false), 150)
   }
-  const handleTimeSlotSelect = (timeSlot:{date:string, time:string, time24:string}) => {
+  const handleTimeSlotSelect = (timeSlot: { date: string, time: string, time24: string }) => {
     setSelectedTimeSlot(`${timeSlot.date} at ${timeSlot.time}`)
     setSelectedSlotData({
       date: timeSlot.date,
@@ -969,7 +969,7 @@ const AddNewCandidate = ({
   useEffect(() => {
     if (prefilledJobData || selectedJob) {
       const jobToUse = prefilledJobData || selectedJob;
-      setFormData((prev:any) => ({
+      setFormData((prev: any) => ({
         ...prev,
         jobId: jobToUse.id,
         clientId: jobToUse.clientId
@@ -993,7 +993,7 @@ const AddNewCandidate = ({
     if (prefilledJobData) {
       const relatedClient = clients.find(client => client.id === prefilledJobData.clientId);
 
-      setFormData((prev:any) => ({
+      setFormData((prev: any) => ({
         ...prev,
         jobId: prefilledJobData.id,
         clientId: prefilledJobData.clientId
@@ -1017,7 +1017,7 @@ const AddNewCandidate = ({
     const handleCompanyChange = (event: CustomEvent) => {
       const selectedCompany = event.detail;
       if (user?.role === 'SuperAdmin') {
-        setFormData((prev:any) => ({
+        setFormData((prev: any) => ({
           ...prev,
           company: selectedCompany.name
         }));
@@ -1422,17 +1422,7 @@ const AddNewCandidate = ({
                   disabled={isSubmitting}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
-                  {isSubmitting ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Adding...
-                    </>
-                  ) : (
-                    'Add Candidate'
-                  )}
+                  {submitButtonText}
                 </button>
               </div>
             </form>
