@@ -636,6 +636,7 @@ const AddNewCandidate = ({
             finalInterviewerId = matchingInterviewer.id;
           } else {
             console.log('No matching interviewer found for job technologies.');
+            toast.error('No matching interviewer found for job technologies. Please select an interviewer manually.');
           }
         } catch (autoAssignError) {
           console.error('Error during auto-assignment:', autoAssignError);
@@ -644,7 +645,10 @@ const AddNewCandidate = ({
 
       if (!finalInterviewerId) {
         setIsSubmitting(false);
-        toast.error('No interviewer found matching the job requirements. Please select an interviewer manually to proceed.');
+        // Toast was already shown above if auto-assign failed, but we show a fallback here if it didn't even try auto-assign
+        if (!(currentJobData && currentJobData.technologies?.length > 0)) {
+          toast.error('No interviewer selected. Please select an interviewer manually to proceed.');
+        }
         return;
       }
       let interviewerData = null;
@@ -790,8 +794,6 @@ const AddNewCandidate = ({
 
   const handleExitDuplicate = () => {
     setShowDuplicateModal(false);
-    resetForm();
-    onClose();
   };
 
   const handleCancel = () => {
@@ -1043,7 +1045,7 @@ const AddNewCandidate = ({
 
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="w-full max-w-4xl max-h-[90vh] transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow-xl flex flex-col">
+        <Dialog.Panel className="w-full max-w-4xl max-h-[90vh] transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 shadow-xl flex flex-col relative">
           <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
             <Dialog.Title className="text-xl font-semibold text-gray-900 dark:text-white">
               {dialogTitle}
@@ -1427,122 +1429,103 @@ const AddNewCandidate = ({
               </div>
             </form>
           </div>
-        </Dialog.Panel>
-      </div>
 
-      {/* Duplicate Candidate Modal */}
-      {showDuplicateModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden m-4">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Existing Candidate Found
-                </h3>
-                <button
-                  onClick={handleExitDuplicate}
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                >
-                  <FiX className="h-5 w-5" />
-                </button>
-              </div>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                A candidate with email <span className="font-medium">{formData.email}</span> already exists in the system.
-              </p>
-            </div>
+          {/* Duplicate Candidate Modal */}
+          {showDuplicateModal && (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-[60]">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden m-4 flex flex-col">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      Existing Candidate Found
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={handleExitDuplicate}
+                      className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    >
+                      <FiX className="h-5 w-5" />
+                    </button>
+                  </div>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    A candidate with email <span className="font-medium text-blue-500">{formData.email}</span> already exists in the system.
+                  </p>
+                </div>
 
-            <div className="p-6 overflow-y-auto max-h-[50vh]">
-              <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">
-                Application History ({duplicateCandidates.length} {duplicateCandidates.length === 1 ? 'entry' : 'entries'})
-              </h4>
+                <div className="p-6 overflow-y-auto flex-1">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-4">
+                    Application History ({duplicateCandidates.length} {duplicateCandidates.length === 1 ? 'entry' : 'entries'})
+                  </h4>
 
-              <div className="space-y-4">
-                {duplicateCandidates.map((candidate, index) => (
-                  <div key={candidate.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h5 className="font-medium text-gray-900 dark:text-white">
-                          {candidate.name}
-                        </h5>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {candidate.primaryContact}
-                        </p>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {candidate.location}
-                        </p>
-                      </div>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${candidate.status === '3' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                        candidate.status === '4' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                          candidate.status === '2' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200'
-                        }`}>
-                        {candidate.status === '0' ? 'APPLIED' :
-                          candidate.status === '1' ? 'WAITING' :
-                            candidate.status === '2' ? 'SCHEDULED' :
-                              candidate.status === '3' ? 'SELECTED' :
-                                candidate.status === '4' ? 'REJECTED' :
-                                  candidate.status === '5' ? 'ON_HOLD' : 'APPLIED'}
-                      </span>
-                    </div>
+                  <div className="space-y-4">
+                    {duplicateCandidates.map((candidate, index) => (
+                      <div key={candidate._id?.$oid || candidate._id || candidate.id || index} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 text-left">
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="font-medium text-gray-700 dark:text-gray-300">Company:</span>
-                        <p className="text-gray-600 dark:text-gray-400">{candidate.company_id?.name || candidate.company || 'N/A'}</p>
-                      </div>
 
-                      {(candidate.client_id || candidate.clientDetails) && (
-                        <div>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">Client:</span>
-                          <p className="text-gray-600 dark:text-gray-400">{candidate.client_id?.name || candidate.clientDetails?.name}</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <span className="font-medium text-gray-700 dark:text-gray-300">Company:</span>
+                            <p className="text-gray-600 dark:text-gray-400">{candidate.company_id?.name || candidate.company || 'N/A'}</p>
+                          </div>
+
+                          {(candidate.client_id || candidate.clientDetails) && (
+                            <div>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">Client:</span>
+                              <p className="text-gray-600 dark:text-gray-400">{candidate.client_id?.name || candidate.clientDetails?.name}</p>
+                            </div>
+                          )}
+
+                          {(candidate.job_id || candidate.jobDetails) && (
+                            <div>
+                              <span className="font-medium text-gray-700 dark:text-gray-300">Job:</span>
+                              <p className="text-gray-600 dark:text-gray-400">{candidate.job_id?.title || candidate.jobDetails?.jobTitle || candidate.job_id?.jobTitle}</p>
+                            </div>
+                          )}
+
+                          <div>
+                            <span className="font-medium text-gray-700 dark:text-gray-300">Applied At:</span>
+                            <p className="text-gray-600 dark:text-gray-400">
+                              {candidate.createdAt ? new Date(candidate.createdAt.$date || candidate.createdAt).toLocaleDateString() : 'N/A'}
+                            </p>
+                          </div>
                         </div>
-                      )}
 
-                      {(candidate.job_id || candidate.jobDetails) && (
-                        <div>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">Job:</span>
-                          <p className="text-gray-600 dark:text-gray-400">{candidate.job_id?.title || candidate.jobDetails?.jobTitle}</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <span className="font-medium text-gray-700 dark:text-gray-300">Applied:</span>
-                        <p className="text-gray-600 dark:text-gray-400">
-                          {candidate.createdAt?.toDate ? candidate.createdAt.toDate().toLocaleDateString() : 'N/A'}
-                        </p>
+                        {candidate.experience && (
+                          <div className="mt-3 text-sm">
+                            <span className="font-medium text-gray-700 dark:text-gray-300">Experience:</span>
+                            <span className="ml-2 text-gray-600 dark:text-gray-400">{candidate.experience} years</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    ))}
+                  </div>
+                </div>
 
-                    {candidate.experience && (
-                      <div className="mt-3 text-sm">
-                        <span className="font-medium text-gray-700 dark:text-gray-300">Experience:</span>
-                        <span className="ml-2 text-gray-600 dark:text-gray-400">{candidate.experience} years</span>
-                      </div>
+                <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <div className="flex justify-end space-x-3">
+                    <button
+                      type="button"
+                      onClick={handleExitDuplicate}
+                      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
+                    >
+                      Exit
+                    </button>
+                    {!duplicateCandidates.some(c => (c.job_id?._id || c.job_id) === formData.jobId) && (
+                      <button
+                        type="button"
+                        onClick={handleContinueWithDuplicate}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600"
+                      >
+                        Continue Adding Candidate
+                      </button>
                     )}
                   </div>
-                ))}
+                </div>
               </div>
             </div>
-
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={handleExitDuplicate}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700"
-                >
-                  Exit
-                </button>
-                <button
-                  onClick={handleContinueWithDuplicate}
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600"
-                >
-                  Continue Adding Candidate
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </Dialog.Panel>
+      </div>
     </Dialog>
   )
 }

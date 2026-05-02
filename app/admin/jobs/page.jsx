@@ -693,8 +693,6 @@ const JobsPage = () => {
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Cancelled</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Tech Issue</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Proxy</th>
-                  <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">On Hold</th>
-
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider whitespace-nowrap">Created</th>
                   <th scope="col" className="px-4 py-3.5 text-left text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Status</th>
                   <th scope="col" className="px-4 py-3.5 text-center text-xs font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-wider">Actions</th>
@@ -734,7 +732,7 @@ const JobsPage = () => {
                         </button>
                       </td>
                       {/* Candidate Status Columns */}
-                      {['total', 'waiting', 'scheduled', 'interviewInReview', 'selected', 'rejected', 'noShow', 'cancelled', 'technicalIssue', 'proxy', 'onHold'].map((status) => (
+                      {['total', 'waiting', 'scheduled', 'interviewInReview', 'selected', 'rejected', 'noShow', 'cancelled', 'technicalIssue', 'proxy'].map((status) => (
                         <td key={status} className="px-4 py-4 text-center">
                           <span className={`inline-flex items-center justify-center min-w-[32px] px-2.5 py-1 rounded-full text-xs font-medium
                             ${status === 'total' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200' :
